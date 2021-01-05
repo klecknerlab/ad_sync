@@ -1,6 +1,8 @@
 # ad_sync
 Hardware and software design for a USB-based analog/digital synchronizer board.  Developed by the MUVI and Kleckner Labs at UC Merced.
 
+![Board Render](board_render.png)
+
 ## Description
 This project is intended to solve a specific problem: synchronizing a laser scanner and camera setup for 3D volumetric imaging.
 To do this, it outputs hardware synchronized digital and analog signals at up to 1 MHz.
@@ -122,7 +124,7 @@ Error strings will always begin with `ERROR:` and end with `⏎`.
 Parameters are specified in square brackets, and correspond to unsigned integers (exception: commands which have an `ON/OFF` option).
 
 * `*IDN⏎`: Returns the identification string for the synchronizer.  (Presently: `USB analog/digital synchronizer (version 1.0)⏎`)
-* `LED [r] [g] [b]⏎`: Set the color of the RGB indicator LED.  Each value should be 0-255.
+* `LED [r] [g] [b]⏎`: Set the color of the RGB indicator LED.  Each value should be 0-255, and the output is gamma corrected.
 * `SER[1/2] WRITE >[n]>[binary data]⏎`: Write `n` bytes to serial port 1/2.  Replies with: `Wrote [n] bytes of data to serial [1/2].⏎`
 * `SER[1/2] READ [n (optional)]⏎`: Read at most `n` bytes of data from serial port 1/2.  If `n` is not specified (or `n` is greater than the amount of available data), return all available data.  Call is non-blocking: it will not wait for data to be available.  Reply format is `>[n]>[n bytes of binary]⏎`.  *Note:* a very large serial read *might* cause an output glitch.  If the reply length is < 60 bytes this should not be a concern.
 * `SER[1/2] AVAIL⏎`: Return the number of bytes available to be read at that serial port.  Reply format: `[n]⏎`
@@ -132,8 +134,11 @@ Parameters are specified in square brackets, and correspond to unsigned integers
 
 
 * `SYNC STAT⏎`: Outputs statistics on the sync DMA buffer output.  Used for debugging, but shouldn't normally be needed.
-* `SYNC WRITE [addr] >[n]>[binary data]⏎`: Write synchronous data starting at indicated address (addr < 16384).  Each data point is four bytes, or a uint32.  Highest two bytes are the digital outputs for that sample and the lowest two bytes are the analog signal.  Note that the microcontroller is little-endian, thus the byte order should be `[analog low][analog high][digital low][digital high]`.  The data written should have a length which is a multiple of 4 bytes, but this is not enforced!  (A warning will be issued if this condition is not met.)  There is no padding between samples, and you can upload as many as you want at once.
-* `SYNC [ON/OFF]⏎`: Turn on/off the synchronous digital outputs.
+* `SYNC WRITE [addr] >[n]>[binary data]⏎`: Write synchronous data starting at indicated address (addr < 16384).  
+    - Each data point is four bytes, or a uint32.  The highest two bytes are the digital outputs for that sample and the lowest two bytes are the analog signal.  Note that the microcontroller is little-endian, thus the byte order should be `[analog low][analog high][digital low][digital high]`.  
+    - The data written should have a length which is a multiple of 4 bytes, but this is not enforced!  (A warning will be issued if this condition is not met.)  There is no padding between samples, and you can upload as many as you want at once.
+    - Ideally, the analog data should span the full 0--65535 range.  The amplitude and offset of the output can be controlled with the `ANA[0/1] SCALE` command, so that you don't have to reupload data to rescale the analog output.
+* `SYNC [ON/OFF]⏎`: Turn on/off the synchronous digital outputs by enabing or disabling the shift register outputs.
 
 **Not yet implemented:**
 
@@ -146,8 +151,8 @@ Parameters are specified in square brackets, and correspond to unsigned integers
 * `SYNC MODE [analog mode] [digital mode (optional)]⏎`: Set the mode of the sync output.  
 	- Analog mode options:
 		- `0`: No sync analog output; each channel goes to the default (set w/ `ANA[0/1] SET`)
-		- `1`: Analog 0 streams from sync data, analog 1 default value (default)
-		- `2`: Analog 1 streams from sync data, analog 0 default value
+		- `1`: Analog 0 streams from sync data, analog 1 fixed value (default)
+		- `2`: Analog 1 streams from sync data, analog 0 fixed value
 		- `3`: Both channels stream, alternating updates.  Even sync data addresses go to analog 0, odd address to analog 1.  Note that this halves the update rate of each channel, relative to the digital signals.
 	- Digital mode options:
 		- `0`: All 16 outputs derived from sync data (default)
