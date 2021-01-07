@@ -47,12 +47,13 @@ The device is most easily controlled with the provided Python library.
 The basic functions are illustrated in the example code below:
 
 ```python
-from ad_sync import ADSync
-import time
+import ad_sync
 import numpy as np
+import time
 
 NUM_SAMPLES = 256
-OUTPUT_FREQ = 100
+OUTPUT_FREQ = 1E3
+START_ADDR = 0
 
 # Analog outputs are updated half a cycle before the digital outputs; we can
 #   correct for the phase by accounting for this.
@@ -60,7 +61,7 @@ t = np.arange(NUM_SAMPLES) - 0.5
 ana0 = np.sin(2*np.pi * t / NUM_SAMPLES)
 
 # Digital outputs are specified bitwise.
-dig = np.zeros(NUM_SAMPLES, dtype='uint16')
+dig = np.zeros(NUM_SAMPLES, dtype='uint32')
 # Setting SD0 (sync'd digital output 0).  High pulse at t=0
 dig[0] += 1<<0
 # Setting SD1.  High pulse at t=128
@@ -68,42 +69,34 @@ dig[NUM_SAMPLES//2] += 1<<1
 # Setting SD2.  We get a high pulse at t=0, 64, 128, 192
 dig[np.arange(4) * NUM_SAMPLES // 4] += 1<<2
 
-# Open a synchronizer device.  If the COM port is not specified, it will
-#   attempt to automatically find the correct one.
-ads = ADSync()
+# Open a synchronizer device.
+# !!! You will probably need to change the COM Port !!!
+sync = ad_sync.ADSync("COM3")
 
-# Stop any existing output and set up the device.
-ads.stop()
-# Mode 0: analog output 0 is fed from the sync data, analog 1 is fixed.
-ads.mode(1)
-# Output a fixed 1.5 V on analog 1.
-ads.analog_output(1, 1.5)
+# Identify device
+print(sync.idn())
 
-# Upload data starting at address 0
-ads.upload_data(0, ana0, dig)
-# The output starts at address 0, and has 256 samples per period
-ads.sync_addr(0)
-ads.sync_cycles(NUM_SAMPLES)
-# Output sample rate
-ads.sync_freq(OUTPUT_FREQ * NUM_SAMPLES)
-# Bit 1 => SD1 is triggered, other outputs are not triggered
-ads.trig_mask(1<<1)
+# Stop any output, if active.
+sync.stop()
 
-# Start up
-ads.start()
+# Write data
+print(sync.write_ad(START_ADDR, dig, ana0))
 
-# Wait for 1 second
-time.sleep(1)
+# Tell the device to use the data we just wrote
+sync.addr(START_ADDR, NUM_SAMPLES)
 
-# Trigger SD1 for a single cycle.  Note that the other outputs are not
-#   triggered because of the trigger mask.  These will always output signals!
-ads.trigger()
+# Set the output rate -- in this case we want to signal to run at 100 Hz, so
+#   the output rate = NUM_SAMPLES * OUTPUT_FREQ = 25600 Hz
+print(sync.rate(NUM_SAMPLES * OUTPUT_FREQ))
 
-# Wait for 1 more second
-time.sleep(1)
+# Set the output range to go from 1--3 volts
+sync.analog_scale(0, 5, 5)
 
-# Shut down the output
-ads.stop()
+# Start the sync output
+sync.start()
+
+# Print some stats
+print(sync.stat())
 ```
 
 ## Communication Protocol
@@ -136,7 +129,9 @@ Parameters are specified in square brackets, and correspond to unsigned integers
     - Each data point is four bytes, or a uint32.  The highest two bytes are the digital outputs for that sample and the lowest two bytes are the analog signal.  Note that the microcontroller is little-endian, thus the byte order should be `[analog low][analog high][digital low][digital high]`.  
     - The data written should have a length which is a multiple of 4 bytes, but this is not enforced!  (A warning will be issued if this condition is not met.)  There is no padding between samples, and you can upload as many as you want at once.
     - Ideally, the analog data should span the full 0--65535 range.  The amplitude and offset of the output can be controlled with the `ANA[0/1] SCALE` command, so that you don't have to reupload data to rescale the analog output.
-* `SYNC [ON/OFF]⏎`: Turn on/off the synchronous digital outputs by enabing or disabling the shift register outputs.
+* `SYNC [START/STOP]⏎`:
+    - Start/stop the synchronous digital outputs by enabling or disabling the shift register outputs and stopping the sync updates.
+    - When stopped, the analog channels will default to the values set by `ANA[0/1] SET`.
 * `SYNC MODE [analog mode] [digital mode (optional)]⏎`: Set the mode of the sync output.  
 	- Analog mode options:
 		- `0`: No sync analog output; each channel goes to the default (set w/ `ANA[0/1] SET`)
@@ -148,8 +143,8 @@ Parameters are specified in square brackets, and correspond to unsigned integers
 		- `1`: "Or" mode.  Channels 0-7 are logical "or"ed with channels 8-15.  8-15 have the normal output.  (Can be used to superimpose triggered and non-triggered signals.)
 * `SYNC ADDR [addr] [count]⏎`: Change the start address and number of data points for a period of the sync output.
 * `SYNC ADDR⏎`: Returns the current sync mode (`SYNC CYCLE [addr] [count]⏎`)
-* `SYNC RATE [samples/s]⏎`:
-    - Change the synchronous output rate, specified in Hz.  Valid values are from 30 to 700000.  
+* `SYNC RATE [rate Hz] [rate mHz (optional)]⏎`:
+    - Change the synchronous output rate, specified in Hz, with any optional millihertz addition.  (i.e. 100.5 Hz would be specified as `SYNC RATE 100 005⏎` or `SYNC RATE 100 5⏎`.)  Valid values are from 30 to 700000.  
     - Replies with `SYNC RATE = [samples/s] Hz⏎`.  Note that [samples/s] will here be floating point, and reflects the actual frequency as set by the device (will likely be *slightly* different than the requested value)
     - Accuracy/precision is ~10 PPM, as determined by main clock accuracy.
 * `ANA[0/1] SCALE [scale] [offset]⏎`:

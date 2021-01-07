@@ -83,9 +83,9 @@ void update_sync() {
                     else {channel = analog_sync_mode - 1;}
 
                     if (channel == 0) {
-                        ad = ((ad * ana0_multiplier) >> 16) + ana0_offset + DAC_SPI_CH0;
+                        ad = min(((ad * ana0_multiplier) >> 16) + ana0_offset, 65535) + DAC_SPI_CH0;
                     } else {
-                        ad = ((ad * ana1_multiplier) >> 16) + ana1_offset + DAC_SPI_CH1;
+                        ad = min(((ad * ana1_multiplier) >> 16) + ana1_offset, 65535) + DAC_SPI_CH1;
                     }
                 }
 

@@ -66,27 +66,35 @@ static const uint32_t CMD_WORDS[NUM_CMD] = {
 // Error types
 enum CMD_ERRORS : int {
     NO_ERROR = 0,
-    ERR_MULT_DATA,
     ERR_UNKNOWN_COMMAND,
     ERR_INVALID_COMMAND,
     ERR_EXTRA_BIN_DATA,
-    ERR_INVALID_DATA,
+    ERR_INVALID_ARG,
+    ERR_MALFORMED_ARG,
     ERR_INVALID_ADDR,
     ERR_INVALID_BIN_DATA_LEN,
-    ERR_TOO_MUCH_DATA,
+    ERR_TOO_MANY_ARGS,
+    ERR_INVALID_FREQ,
+    ERR_MISSING_ARG,
+    ERR_WRONG_NUM_ARGS1,
+    ERR_WRONG_NUM_ARGS2,
 };
 
 // Error outputs for each type.
 static const char* ERROR_STR[] = {
-    "none",
-    "multiple integer data (max 1 integer value)",
+    "mystery error (this should never happen)",
     "unknown command",
-    "invalid command format",
+    "invalid command",
     "included binary data, but command does not support it",
-    "invalid data value",
+    "invalid argument value",
+    "malformed argument (only integer arguments accepted)",
     "invalid address",
     "invalid binary data length",
-    "too many data integers",
+    "too many arguments",
+    "invalid freq (should be >=30 and <=700000)",
+    "missing argument",
+    "wrong number of arguments (should be 1)",
+    "wrong number of arguments (should be 2)",
 };
 
 #define STR_BUF_LEN 65
@@ -103,7 +111,7 @@ class CommandQueue {
         int bin_data_len;
         int bin_target;
         int bin_data_written;
-        uint8_t *sync_data;
+        uint8_t *sync_ptr;
         uint8_t *sync_end;
         void (*output_str)(const char*);
         char str_buffer[STR_BUF_LEN];
@@ -111,6 +119,7 @@ class CommandQueue {
         void output_int(int x) {output_str(itoa(x, str_buffer, 10));}
         void output_eol() {output_str("\n");}
         void output_ok() {output_str("ok.\n");}
+        void output_error();
         void output_float(float x);
         void finish_word();
         void execute_command();

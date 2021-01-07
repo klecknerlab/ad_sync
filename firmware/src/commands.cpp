@@ -51,7 +51,7 @@ void CommandQueue::reset() {
     num_data = 0;
     bin_data_len = 0;
     bin_target = TARGET_NONE;
-    sync_data = (uint8_t*)sync_data;
+    sync_ptr = (uint8_t*)sync_data;
     bin_data_written = 0;
 }
 
@@ -77,6 +77,12 @@ void CommandQueue::finish_word() {
     cycle = IDLE;
 }
 
+void CommandQueue::output_error() {
+    output_str("ERROR: ");
+    output_str(ERROR_STR[error]);
+    output_eol();
+}
+
 void CommandQueue::execute_command() {
     if (cycle == READ_WORD) {finish_word();}
 
@@ -92,9 +98,7 @@ void CommandQueue::execute_command() {
     #endif
 
     if (error) {
-        output_str("ERROR: ");
-        output_str(ERROR_STR[error]);
-        output_eol();
+        output_error();
     } else {
         int i, n;
         char tmp_char;
@@ -140,6 +144,7 @@ void CommandQueue::execute_command() {
             case CMD2(SER1, READ):
                 if (num_data < 1) {n = ser1_buffer_count;}
                 else {n = min(data[0], ser1_buffer_count);}
+
                 output_str(">");
                 output_int(n);
                 output_str(">");
@@ -160,6 +165,7 @@ void CommandQueue::execute_command() {
             case CMD2(SER2, READ):
                 if (num_data < 1) {n = ser2_buffer_count;}
                 else {n = min(data[0], ser2_buffer_count);}
+
                 output_str(">");
                 output_int(n);
                 output_str(">");
@@ -178,8 +184,9 @@ void CommandQueue::execute_command() {
                 break;
 
             case CMD2(SER1, RATE):
-                if (num_data < 1) {
-                    output_str("ERROR: rate not specified!\n");
+                if (num_data != 1) {
+                    error = ERR_WRONG_NUM_ARGS1;
+                    output_error();
                 } else {
                     Serial1.end();
                     Serial1.begin(data[0], SERIAL_8N1, RX1_PIN, TX1_PIN);
@@ -189,8 +196,9 @@ void CommandQueue::execute_command() {
                 break;
 
             case CMD2(SER2, RATE):
-                if (num_data < 1) {
-                    output_str("ERROR: rate not specified!\n");
+                if (num_data != 1) {
+                    error = ERR_WRONG_NUM_ARGS1;
+                    output_error();
                 } else {
                     Serial2.end();
                     Serial2.begin(data[0], SERIAL_8N1, RX2_PIN, TX2_PIN);
@@ -234,7 +242,8 @@ void CommandQueue::execute_command() {
 
             case CMD2(ANA0, SET):
                 if (num_data != 1) {
-                    output_str("ERROR: analog set should have one data int!\n");
+                    error = ERR_WRONG_NUM_ARGS1;
+                    output_error();
                 } else {
                     ana0_set = data[0];
                     analog_update |= 1<<0;
@@ -244,7 +253,8 @@ void CommandQueue::execute_command() {
 
             case CMD2(ANA1, SET):
                 if (num_data != 1) {
-                    output_str("ERROR: analog set should have one data int!\n");
+                    error = ERR_WRONG_NUM_ARGS1;
+                    output_error();
                 } else {
                     ana1_set = data[0];
                     analog_update |= 1<<1;
@@ -254,7 +264,8 @@ void CommandQueue::execute_command() {
 
             case CMD2(ANA0, SCALE):
                 if (num_data != 2) {
-                    output_str("ERROR: analog scale command must have two data ints!\n");
+                    error = ERR_WRONG_NUM_ARGS2;
+                    output_error();
                 } else {
                     ana0_multiplier = data[0];
                     ana0_offset = data[1];
@@ -264,7 +275,8 @@ void CommandQueue::execute_command() {
 
             case CMD2(ANA1, SCALE):
                 if (num_data != 2) {
-                    output_str("ERROR: analog scale command must have two data ints!\n");
+                    error = ERR_WRONG_NUM_ARGS2;
+                    output_error();
                 } else {
                     ana1_multiplier = data[0];
                     ana1_offset = data[1];
@@ -285,7 +297,8 @@ void CommandQueue::execute_command() {
                     digital_sync_mode = ((num_data == 1) || data[1]) ? 1 : 0;
                     output_ok();
                 } else {
-                    output_str("ERROR: invalid sync mode!\n");
+                    error = ERR_INVALID_ARG;
+                    output_error();
                 }
                 break;
             
@@ -295,37 +308,49 @@ void CommandQueue::execute_command() {
                     sync_cycles = data[1];
                     output_ok();
                 } else {
-                    output_str("ERROR: invalid start/end address fo SYNC CYCLE (both should be < ");
-                    output_int(SYNC_DATA_SIZE);
-                    output_str(")\n");
+                    error = ERR_INVALID_ADDR;
+                    output_error();
                 }
                 break;
 
-            case CMD2(SYNC, CMD_ON):
+            case CMD2(SYNC, START):
                 sync_active = 1;
                 digitalWrite(OE_PIN, LOW);
                 output_ok();
                 break;
 
-            case CMD2(SYNC, CMD_OFF):
+            case CMD2(SYNC, STOP):
                 sync_active = 0;
                 digitalWrite(OE_PIN, HIGH);
                 output_ok();
                 break;
 
             case CMD2(SYNC, RATE):
-                if (num_data == 1) {
-                    float freq = sync_freq((float)data[0]);
-                    output_str("SYNC RATE = ");
-                    output_float(freq);
-                    output_str(" Hz\n");
+                if ((num_data == 1) || (num_data == 2)) {
+                    float freq = (float)data[0];
+
+                    if (num_data == 2) {
+                        freq += 1E-3 * data[1];
+                    }
+
+                    if ((freq < MIN_FREQ) || (freq > MAX_FREQ)) {
+                        error = ERR_INVALID_FREQ;
+                        output_error();
+                    } else {
+                        freq = sync_freq(freq);
+                        output_str("SYNC RATE = ");
+                        output_float(freq);
+                        output_str(" Hz\n");
+                    }
                 } else {
-                    output_str("ERROR: SYNC RATE should have 1 argument.\n");
+                    error = ERR_WRONG_NUM_ARGS2;
+                    output_error();
                 }
                 break;
 
             default:
-                output_str("ERROR: unknown command (ignored)\n");
+                error = ERR_INVALID_COMMAND;
+                output_error();
         }
     }
 
@@ -337,9 +362,9 @@ void CommandQueue::process_char(char c) {
     if (cycle == READ_BIN) {
         switch (bin_target) {
             case TARGET_SYNC_DATA:
-                *sync_data = (uint8_t)c;
-                sync_data ++;
-                if (sync_data >= sync_end) {
+                *sync_ptr = (uint8_t)c;
+                sync_ptr ++;
+                if (sync_ptr >= sync_end) {
                     error = ERR_INVALID_ADDR;
                     bin_target = TARGET_NONE;
                 }
@@ -382,9 +407,9 @@ void CommandQueue::process_char(char c) {
                         bin_target = TARGET_SERIAL2;
                         break;
                     case CMD2(SYNC, WRITE):
-                        if ((data[0] >= 0) && (data[0] < SYNC_DATA_SIZE)) {
+                        if ((num_data == 1) && (data[0] >= 0) && (data[0] < SYNC_DATA_SIZE)) {
                             bin_target = TARGET_SYNC_DATA;
-                            sync_data = (uint8_t*) (sync_data + data[0]);
+                            sync_ptr = (uint8_t*)(sync_data + data[0]);
                         } else {
                             bin_target = TARGET_NONE;
                             error = ERR_INVALID_ADDR;
@@ -406,9 +431,11 @@ void CommandQueue::process_char(char c) {
 
     if (ct == EOL) {
         execute_command();
+        return;
     } else if (ct == BINSTART) {
         bin_data_len = 0;
         cycle = READ_BIN_LEN;
+        return;
     } else {//Regular character
 
         //If idle, determine how to process the character based on what it is.
@@ -433,25 +460,26 @@ void CommandQueue::process_char(char c) {
         }
 
         if (cycle == READ_WORD) {
-            if (ct == WHITESPACE) {finish_word();}
-            else {
+            if (ct == WHITESPACE) {
+                finish_word();
+            } else {
                 if ((c >= 97) && (c <= 122)) {c -= 32;} // Capitalize
                 if (word_i < 4) {word = (word << 8) + (uint32_t)c;}
                 word_i++;
             }
         } else if (cycle == READ_INT) {
-            if (ct == WHITESPACE) {cycle = IDLE;}
-            else if (ct == DIGIT) {
-                    if (num_data <= MAX_CMD_INTS) {
-                        data[num_data-1] = data[num_data-1]*10 + ((int)c-48);
-                    } else {
-                        cycle = CMD_ERROR;
-                        error = ERR_TOO_MUCH_DATA;
-                    }
+            if (ct == WHITESPACE) {
+                cycle = IDLE;
+            } else if (ct == DIGIT) {
+                if (num_data <= MAX_CMD_INTS) {
+                    data[num_data-1] = data[num_data-1]*10 + ((int)c-48);
+                } else {
+                    cycle = CMD_ERROR;
+                    error = ERR_TOO_MANY_ARGS;
                 }
-            else {
+            } else {
                 cycle = CMD_ERROR;
-                error = ERR_INVALID_DATA;
+                error = ERR_MALFORMED_ARG;
             }
         }
     }
