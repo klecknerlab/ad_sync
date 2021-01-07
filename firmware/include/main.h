@@ -3,8 +3,9 @@
 #define MAIN_H 1
 #include <Arduino.h>
 
-// If defined, print command debugging messages after each command.  Not recommended for general use!
-#define CMD_DEBUG 1
+// If defined, print debugging messages.  Not recommended for general use!
+// #define CMD_DEBUG 1
+// #define FREQ_DEBUG 1
 
 // Version numbers.
 #define VERSION_MAJOR 1
@@ -44,6 +45,11 @@ const uint8_t LED_PINS[3] = {LED_R_PIN, LED_G_PIN, LED_B_PIN};
 #define min(a,b) (((a)<(b))?(a):(b))
 #define max(a,b) (((a)>(b))?(a):(b))
 
+// Bit detph of I2S output 
+// Note: if you need to change this, it will require *many* alterations to other parts of the code!
+// (This is just defined for convenience -- don't change it!)
+#define I2S_BIT_DEPTH 24
+
 // Globally shared variables and arrays
 // Most of these are output settings which need to be modified by the command queue
 
@@ -65,42 +71,33 @@ extern uint32_t sync_data[SYNC_DATA_SIZE];
 // The start and length of the current cycle
 extern int sync_start, sync_cycles;
 
+// Is the sync output active?
+extern int sync_active;
+
+// Minimum and maximum frequency, set by the limits of the APLL clock
+#define MIN_FREQ 30
+#define MAX_FREQ 700000
+
 // Used to compute "sync stat" output
 extern uint last_bytes_written, cycles_since_write;
 extern unsigned long buffer_update_time;
 
 // Analog default outputs when not in sync mode
-extern uint16_t analog_default[2];
+extern uint16_t ana0_set, ana1_set;
 
 // Analog channel flags; bit 0 => ana0, bit 1 -> ana1
 // If update is set for a channel, then the "default" value needs to be sent to the DAC
-extern int analog_update, analog_enabled;
+extern int analog_update, analog_sync_mode;
 
 // Used to scale analog output
-extern uint analog_multiplier;
-extern uint analog_offset;
+extern uint32_t ana0_multiplier, ana0_offset, ana1_multiplier, ana1_offset;
 
-// I2S config options
-#include "driver/i2s.h"
+// Digital output mode
+extern int digital_sync_mode;
 
-const i2s_config_t i2s_config = {
-    .mode = i2s_mode_t(I2S_MODE_MASTER | I2S_MODE_TX),
-    .sample_rate = 200000, // This is irrelevant, changed later by other code
-    .bits_per_sample = I2S_BITS_PER_SAMPLE_24BIT,
-    .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
-    .communication_format = i2s_comm_format_t(I2S_COMM_FORMAT_I2S | I2S_COMM_FORMAT_I2S_LSB), // "LSB" alignment is really MSB alignment.  Don't ask me why!
-    .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
-    .dma_buf_count = 4,
-    .dma_buf_len = (2*I2S_WRITE_BUFFER_SIZE),
-    .use_apll = true,
-};
 
-const i2s_pin_config_t pin_config = {
-    .bck_io_num = I2S_CLK_PIN,
-    .ws_io_num = I2S_WS_PIN,
-    .data_out_num = I2S_SD_PIN,
-    .data_in_num = -1,
-};
+// Function to change frequency
+float sync_freq(float freq);
 
 
 #endif

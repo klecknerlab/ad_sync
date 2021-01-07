@@ -7,7 +7,7 @@ Hardware and software design for a USB-based analog/digital synchronizer board. 
 This project is intended to solve a specific problem: synchronizing a laser scanner and camera setup for 3D volumetric imaging.
 To do this, it outputs hardware synchronized digital and analog signals at up to 1 MHz.
 The hardware works by converting a single digital bit stream from the on board ESP32 processor to a series of shift registers (providing 16 digital outputs) and a digital-to-analog converter (providing 16 bit 2 analog channels, ± 10V range).
-The update rate is tunable from ~1 Hz to 1 MHz, with a ~10 PPM accurate clock (provided by the APLL clock on the ESP32).
+The update rate is tunable from 30 Hz to 700 kHz, with a ~10 PPM accurate clock (provided by the APLL clock on the ESP32).
 
 The output is divided into periods of up to 16384 samples.
 Each output to the device is uploaded as 32 bits: the high 16 bits correspond to the digital outputs, and the low bits correspond to one of the analog outputs.
@@ -115,39 +115,28 @@ The format for binary appended data is `>[number of bytes]>[binary data]`, and s
 
 Note that if the word is longer than 4 letters the extra letters are ignored.
 In other words `SYNC AVAIL` is the same as `SYNC AVAI` (or even `SYNC AVAILABLE` if you prefer).  
-Lower case letters are converted to upper case internally (i.e. `Sync AvAixyz` is also equivalent.)
+Lower case letters are converted to upper case internally (i.e. `SynC AvAiXXX` is also equivalent.)
 
 Unless specified otherwise, commands return `ok.⏎` on success.
 Error strings will always begin with `ERROR:` and end with `⏎`.
 
+*Note:* For the command words `ANA0`, `ANA1`, `SER1`, and `SER2` there is no space between the letters and number -- this number is part of the command, not an argument!
+(If you're wondering why the serial numbering starts with 1: this is because serial 0 is the USB connection.)
+
 ### List of Serial Commands
 Parameters are specified in square brackets, and correspond to unsigned integers (exception: commands which have an `ON/OFF` option).
 
+**Misc Commands**
 * `*IDN⏎`: Returns the identification string for the synchronizer.  (Presently: `USB analog/digital synchronizer (version 1.0)⏎`)
 * `LED [r] [g] [b]⏎`: Set the color of the RGB indicator LED.  Each value should be 0-255, and the output is gamma corrected.
-* `SER[1/2] WRITE >[n]>[binary data]⏎`: Write `n` bytes to serial port 1/2.  Replies with: `Wrote [n] bytes of data to serial [1/2].⏎`
-* `SER[1/2] READ [n (optional)]⏎`: Read at most `n` bytes of data from serial port 1/2.  If `n` is not specified (or `n` is greater than the amount of available data), return all available data.  Call is non-blocking: it will not wait for data to be available.  Reply format is `>[n]>[n bytes of binary]⏎`.  *Note:* a very large serial read *might* cause an output glitch.  If the reply length is < 60 bytes this should not be a concern.
-* `SER[1/2] AVAIL⏎`: Return the number of bytes available to be read at that serial port.  Reply format: `[n]⏎`
-* `SER[1/2] FLUSH⏎`: Flush the read buffer for a serial port.
-* `SER[1/2] RATE [baud rate]⏎`: Set the baud rate for a serial port.  The serial format is always 8 bits with a start and stop bit.  (This could be changed by altering the firmware, if needed.)
 
-
-
+**Sync Output Commands**
 * `SYNC STAT⏎`: Outputs statistics on the sync DMA buffer output.  Used for debugging, but shouldn't normally be needed.
 * `SYNC WRITE [addr] >[n]>[binary data]⏎`: Write synchronous data starting at indicated address (addr < 16384).  
     - Each data point is four bytes, or a uint32.  The highest two bytes are the digital outputs for that sample and the lowest two bytes are the analog signal.  Note that the microcontroller is little-endian, thus the byte order should be `[analog low][analog high][digital low][digital high]`.  
     - The data written should have a length which is a multiple of 4 bytes, but this is not enforced!  (A warning will be issued if this condition is not met.)  There is no padding between samples, and you can upload as many as you want at once.
     - Ideally, the analog data should span the full 0--65535 range.  The amplitude and offset of the output can be controlled with the `ANA[0/1] SCALE` command, so that you don't have to reupload data to rescale the analog output.
 * `SYNC [ON/OFF]⏎`: Turn on/off the synchronous digital outputs by enabing or disabling the shift register outputs.
-
-**Not yet implemented:**
-
-
-* `SYNC RATE [samples/s]⏎`: Change the synchronous output rate, specified in Hz.  Valid values are from ~100 Hz to 1 MHz.  Accuracy/precision is ~10 PPM.
-* `SYNC START ADDR [addr]⏎`: Change the start address for sync output data.
-* `SYNC CYCLES [cycles]⏎`: Change the number of sync data points per output cycle.
-* `SYNC READ [addr] [samples]⏎`: Read a specified number of samples from the sync data.  Return format is `>[samples*4]>[binary data]⏎`.  *Note:* reads of large amounts of sync data may cause an output glitch.
-
 * `SYNC MODE [analog mode] [digital mode (optional)]⏎`: Set the mode of the sync output.  
 	- Analog mode options:
 		- `0`: No sync analog output; each channel goes to the default (set w/ `ANA[0/1] SET`)
@@ -157,9 +146,46 @@ Parameters are specified in square brackets, and correspond to unsigned integers
 	- Digital mode options:
 		- `0`: All 16 outputs derived from sync data (default)
 		- `1`: "Or" mode.  Channels 0-7 are logical "or"ed with channels 8-15.  8-15 have the normal output.  (Can be used to superimpose triggered and non-triggered signals.)
+* `SYNC ADDR [addr] [count]⏎`: Change the start address and number of data points for a period of the sync output.
+* `SYNC ADDR⏎`: Returns the current sync mode (`SYNC CYCLE [addr] [count]⏎`)
+* `SYNC RATE [samples/s]⏎`:
+    - Change the synchronous output rate, specified in Hz.  Valid values are from 30 to 700000.  
+    - Replies with `SYNC RATE = [samples/s] Hz⏎`.  Note that [samples/s] will here be floating point, and reflects the actual frequency as set by the device (will likely be *slightly* different than the requested value)
+    - Accuracy/precision is ~10 PPM, as determined by main clock accuracy.
+* `ANA[0/1] SCALE [scale] [offset]⏎`:
+    - Change the output scale and offset of this channel.  Each scale/offset should be from 0-65536 and covers the range of -10 to 10 V.  
+    - `scale` indicates the peak to peak amplitude of the signal (65536 = 20 V peak-to-peak, 3277 = 1.0000 V peak-to-peak)
+    - `offset` is the minimum value of the signal (0 = -10 V, 65536 = 10V, 32768 = 0V.)  
+    - *Note:* the above scaling assumes the input waveform goes from 0-65535 in the sync data.  If it does not, it will be proportionally smaller.
+* `ANA[0/1] SET [value]⏎`:
+    - Directly set the analog output value for one of the channels (0=-10V, 65536 = +10V).  No scaling or offset is applied.  
+    - *Note 1:* Command ignored if this channel is currently updating synchronously.  
+    - *Note 2:* Updating while the sync is running on the other channel will introduce a one sample skip in the output of the synced channel.
 
-* `ANA[0/1] SCALE [scale] [offset]⏎`: Change the output scale and offset of this channel.  Each scale/offset should be from 0-65536 and covers the range of -10 to 10 V.  `scale` indicates the peak to peak amplitude of the signal (65536 = 20 V peak-to-peak, 3277 = 1.0000 V peak-to-peak), and `offset` is the minimum value of the signal (0 = -10 V, 65536 = 10V, 32768 = 0V.)  [Note: the above scaling assumes the input waveform goes from 0-65535 in the sync data.  If it does not, it will be proportionally smaller.]
-* `ANA[0/1] SET [value]⏎`: Directly set the analog output value for one of the channels (0=-10V, 65536 = +10V).  No scaling or offset is applied.  *Note 1:* Command ignored if this channel is currently updating synchronously.  *Note 2:* Updating while the sync is running on the other channel will introduce a one period glitch in the output of the synced channel.
+**Serial Commands**
+* `SER[1/2] WRITE >[n]>[binary data]⏎`: Write `n` bytes to serial port 1/2.  Replies with: `Wrote [n] bytes of data to serial [1/2].⏎`
+* `SER[1/2] READ [n (optional)]⏎`:
+    -Read at most `n` bytes of data from serial port 1/2  
+    - If `n` is not specified (or `n` is greater than the amount of available data), return all available data.  
+    - Call is non-blocking: it will not wait for data to be available
+    - Reply format is `>[n]>[n bytes of binary]⏎`  
+    - *Note:* a very large serial read *might* cause an output glitch.  If the reply length is < 60 bytes this should not be a concern.
+* `SER[1/2] AVAIL⏎`: Return the number of bytes available to be read at that serial port.  Reply format: `[n]⏎`
+* `SER[1/2] FLUSH⏎`: Flush the read buffer for a serial port.
+* `SER[1/2] RATE [baud rate]⏎`: Set the baud rate for a serial port.  The serial format is always 8 bits with a start and stop bit.  (This could be changed by altering the firmware, if needed.)
+
+
+**Not yet implemented:**
+
+* `SYNC READ [addr] [samples]⏎`:
+    - Read a specified number of samples from the sync data
+    - Return format is `>[samples*4]>[binary data]⏎`
+    - *Note:* reading a large amount of sync data (> 15 data points) may cause an output glitch in the sync data!
+
+
+
+
+
 
 * `TRIG MASK [bit mask]⏎`: A bit mask indicated if each digital output channel is triggered.  Triggered channels output low until triggered.
-* `TRIG [cycles (optiona)]⏎`: Activate the trigger for the specified number of cycles.  `cycles=1` is the default.  Note that there may be a delay of up to 256 samples in outputting a triggered signal, due to the output buffering.  Also, triggers always begin at the beginning of a cycle.
+* `TRIG [cycles (optional)]⏎`: Activate the trigger for the specified number of cycles.  `cycles=1` is the default.  Note that there may be a delay of up to 256 samples in outputting a triggered signal, due to the output buffering.  Also, triggers always begin at the beginning of a cycle.

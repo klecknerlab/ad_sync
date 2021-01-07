@@ -16,6 +16,33 @@ CommandQueue::CommandQueue(void (*func_ptr)(const char *)) {
     reset();
 }
 
+void CommandQueue::output_float(float x) {
+    int ipart = (int)x;
+    output_int(ipart); //Note: the int gets put in str_buffer!
+
+    // Find the number of digits by snooping in the str_buffer
+    int dig;
+    for (dig=0; dig<STR_BUF_LEN; dig++) {
+        if (str_buffer[dig] == 0) {break;}
+    }
+
+    int dp = 7 - dig; // Print 7 sig figs
+    if (dp > 0) {
+        output_str(".");
+        float frac = x - ipart;
+        for (int i=0; i<dp; i++) {frac *= 10;}
+        // We *could* round the fractional part, but this *might* also affect the ipart, so it's too late!
+
+        itoa((int)frac, str_buffer, 10);
+        dig = 0;    
+        for (dig=0; dig<STR_BUF_LEN; dig++) {
+            if (str_buffer[dig] == 0) {break;}
+        }
+        for (int i=dig; i<dp; i++) {output_str("0");}
+        output_str(str_buffer);
+    }
+}
+
 void CommandQueue::reset() {
     cycle = IDLE;
     error = NO_ERROR;
@@ -29,16 +56,18 @@ void CommandQueue::reset() {
 }
 
 void CommandQueue::finish_word() {
-    for (int i=0; i<4; i++) {
-        str_buffer[i] = (word >> ((3-i)*8)) & (0xFF);
-    }
-    str_buffer[4] = 0;
-    output_str(str_buffer);
-    output_eol();
+    // for (int i=0; i<4; i++) {led 0 
+    //     str_buffer[i] = (word >> ((3-i)*8)) & (0xFF);
+    // }
+    // str_buffer[4] = 0;
+    // output_str(str_buffer);
+    // output_eol();
 
     int word_id = CMD_INVALID;
-    for (int i=1; i <= NUM_CMD; i++) {
-        if (CMD_WORDS[i] == word) {word_id = i; break;}
+    for (int i=1; i < NUM_CMD; i++) {
+        if (CMD_WORDS[i] == word) {
+            word_id = i; break;
+        }
     }
 
     command = (command << 8) + word_id;
@@ -54,36 +83,13 @@ void CommandQueue::execute_command() {
     #ifdef CMD_DEBUG
         output_str("Command: ");
         output_int(command);
+        output_str(", Data:");
         for (int i=0; i<num_data; i++) {
             output_str(" ");
             output_int(data[i]);
         }
         output_eol();
     #endif
-
-    // Serial.write("Command: ");
-    // Serial.print(command);
-    // Serial.write("\nWords: ");
-    // Serial.print(word);
-
-    // for (int i=0; i<4; i++) {
-    //     int word_id = (command >> (i*8)) & (0xFF);
-    //     if ((word_id <= NUM_CMD) && (word_id > 0)) {
-    //         // Serial.print(word_id);
-    //         // char *buffer = (char*)(CMD_WORDS + word_id);
-    //         // Serial.write((const uint8_t*)(CMD_WORDS + word_id), 4);
-    //         Serial.print(word_id);
-    //         Serial.write(" ");
-    //         // for (j=0; j < 4; j++)
-    //         // Serial.w
-    //     } else if (word_id > NUM_CMD) {
-    //         Serial.write("? ");
-    //     }
-    // }
-    //
-    // Serial.write("\nData: ");
-    // Serial.print(data);
-    // Serial.write("\n");
 
     if (error) {
         output_str("ERROR: ");
@@ -95,7 +101,7 @@ void CommandQueue::execute_command() {
 
         switch (command) {
             case IDN:
-                output_str("USB analog/digital synchronizer (version");
+                output_str("USB analog/digital synchronizer (version ");
                 output_int(VERSION_MAJOR);
                 output_str(".");
                 output_int(VERSION_MINOR);
@@ -106,16 +112,6 @@ void CommandQueue::execute_command() {
                 for (i=0; i<3; i++) {
                     ledcWrite(i, (LED_LUT[min(data[i], 255)] * LED_TRIM[i]) >> 16);
                 }
-                output_ok();
-                break;
-
-            case CMD2(SYNC, CMD_ON):
-                digitalWrite(OE_PIN, LOW);
-                output_ok();
-                break;
-
-            case CMD2(SYNC, CMD_OFF):
-                digitalWrite(OE_PIN, HIGH);
                 output_ok();
                 break;
 
@@ -237,22 +233,94 @@ void CommandQueue::execute_command() {
                 break;
 
             case CMD2(ANA0, SET):
-                if (num_data < 1) {
-                    output_str("ERROR: output not specified!\n");
+                if (num_data != 1) {
+                    output_str("ERROR: analog set should have one data int!\n");
                 } else {
-                    analog_default[0] = data[0];
+                    ana0_set = data[0];
                     analog_update |= 1<<0;
                     output_ok();
                 }
                 break;
 
             case CMD2(ANA1, SET):
-                if (num_data < 1) {
-                    output_str("ERROR: output not specified!\n");
+                if (num_data != 1) {
+                    output_str("ERROR: analog set should have one data int!\n");
                 } else {
-                    analog_default[1] = data[0];
+                    ana1_set = data[0];
                     analog_update |= 1<<1;
                     output_ok();
+                }
+                break;
+
+            case CMD2(ANA0, SCALE):
+                if (num_data != 2) {
+                    output_str("ERROR: analog scale command must have two data ints!\n");
+                } else {
+                    ana0_multiplier = data[0];
+                    ana0_offset = data[1];
+                    output_ok();
+                }
+                break;
+
+            case CMD2(ANA1, SCALE):
+                if (num_data != 2) {
+                    output_str("ERROR: analog scale command must have two data ints!\n");
+                } else {
+                    ana1_multiplier = data[0];
+                    ana1_offset = data[1];
+                    output_ok();
+                }
+                break;
+
+            case CMD2(SYNC, MODE):
+                if (num_data == 0) {
+                    output_str("SYNC MODE ");
+                    output_int(analog_sync_mode);
+                    output_str(" ");
+                    output_int(digital_sync_mode);
+                    output_eol();
+                } else if (data[0] < 4) {
+                    analog_sync_mode = data[0];
+                    analog_update |= (~analog_sync_mode) & 0b11;
+                    digital_sync_mode = ((num_data == 1) || data[1]) ? 1 : 0;
+                    output_ok();
+                } else {
+                    output_str("ERROR: invalid sync mode!\n");
+                }
+                break;
+            
+            case CMD2(SYNC, ADDR):
+                if ((num_data == 2) && (data[0] < SYNC_DATA_SIZE) && (data[1] < SYNC_DATA_SIZE)) {
+                    sync_start = data[0];
+                    sync_cycles = data[1];
+                    output_ok();
+                } else {
+                    output_str("ERROR: invalid start/end address fo SYNC CYCLE (both should be < ");
+                    output_int(SYNC_DATA_SIZE);
+                    output_str(")\n");
+                }
+                break;
+
+            case CMD2(SYNC, CMD_ON):
+                sync_active = 1;
+                digitalWrite(OE_PIN, LOW);
+                output_ok();
+                break;
+
+            case CMD2(SYNC, CMD_OFF):
+                sync_active = 0;
+                digitalWrite(OE_PIN, HIGH);
+                output_ok();
+                break;
+
+            case CMD2(SYNC, RATE):
+                if (num_data == 1) {
+                    float freq = sync_freq((float)data[0]);
+                    output_str("SYNC RATE = ");
+                    output_float(freq);
+                    output_str(" Hz\n");
+                } else {
+                    output_str("ERROR: SYNC RATE should have 1 argument.\n");
                 }
                 break;
 
@@ -373,7 +441,14 @@ void CommandQueue::process_char(char c) {
             }
         } else if (cycle == READ_INT) {
             if (ct == WHITESPACE) {cycle = IDLE;}
-            else if (ct == DIGIT) {data[num_data-1] = data[num_data-1]*10 + ((int)c-48);}
+            else if (ct == DIGIT) {
+                    if (num_data <= MAX_CMD_INTS) {
+                        data[num_data-1] = data[num_data-1]*10 + ((int)c-48);
+                    } else {
+                        cycle = CMD_ERROR;
+                        error = ERR_TOO_MUCH_DATA;
+                    }
+                }
             else {
                 cycle = CMD_ERROR;
                 error = ERR_INVALID_DATA;

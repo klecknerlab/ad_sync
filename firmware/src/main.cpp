@@ -39,24 +39,7 @@ void setup()
     Serial1.flush();
     Serial2.flush();
 
-    // Install I2S driver; this is used to drive the sync outputs.
-    esp_err_t err;
-
-    err = i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL);
-    if (err != ESP_OK) {
-        Serial.write("Failed installing I2S driver!\n");
-        return;
-    }
-
-    err = i2s_set_pin(I2S_NUM_0, &pin_config);
-    if (err != ESP_OK) {
-        Serial.write("Failed setting I2S pins!\n");
-        return;
-    }
-
-    Serial.write("I2S driver installed succesfully.\n");
-
-    i2s_start(I2S_NUM_0);
+    init_sync();
 
     // Create some example sync data.
     for (int i=0; i<1024; i++) {
@@ -82,6 +65,7 @@ void loop()
     for (int i=Serial.available(); i>0; i--) {
         int c = Serial.read();
         if (c >= 0) {serial_commands.process_char((char)c);}
+        // Serial.write((char)c); //echo for debugging
     }
 
     // Check if there is anything in the serial buffers, and update as needed.

@@ -16,7 +16,7 @@ enum BIN_WRITE_TARGETS : int {TARGET_NONE, TARGET_SYNC_DATA, TARGET_SERIAL1, TAR
 // (By converting 1-4 words into a single uint32, we can quickly compare the commands)
 enum CMD_NAMES : uint8_t {
     CMD_NONE, SYNC, READ, WRITE, ADDR, START, STOP, COUNT, RATE, ANA0, ANA1, SER1, SER2,
-    TRIG, MASK, AVAIL, FLUSH, LED, CMD_ON, CMD_OFF, STAT, SET, IDN, 
+    TRIG, MASK, AVAIL, FLUSH, LED, CMD_ON, CMD_OFF, STAT, SET, SCALE, MODE, IDN, 
     CMD_INVALID //NOTE: If you add commands, CMD_INVALID MUST be LAST!
 };
 
@@ -48,7 +48,9 @@ static const uint32_t CMD_WORDS[NUM_CMD] = {
     CMD_UINT("\0\0ON"),
     CMD_UINT("\0OFF"),
     CMD_UINT("STAT"),
-    CMD_UINT("SET"),
+    CMD_UINT("\0SET"),
+    CMD_UINT("SCAL"),
+    CMD_UINT("MODE"),
     CMD_UINT("*IDN"),
 };
 
@@ -71,6 +73,7 @@ enum CMD_ERRORS : int {
     ERR_INVALID_DATA,
     ERR_INVALID_ADDR,
     ERR_INVALID_BIN_DATA_LEN,
+    ERR_TOO_MUCH_DATA,
 };
 
 // Error outputs for each type.
@@ -83,7 +86,10 @@ static const char* ERROR_STR[] = {
     "invalid data value",
     "invalid address",
     "invalid binary data length",
+    "too many data integers",
 };
+
+#define STR_BUF_LEN 65
 
 // Command queue class
 class CommandQueue {
@@ -100,11 +106,12 @@ class CommandQueue {
         uint8_t *sync_data;
         uint8_t *sync_end;
         void (*output_str)(const char*);
-        char str_buffer[65];
+        char str_buffer[STR_BUF_LEN];
 
         void output_int(int x) {output_str(itoa(x, str_buffer, 10));}
         void output_eol() {output_str("\n");}
         void output_ok() {output_str("ok.\n");}
+        void output_float(float x);
         void finish_word();
         void execute_command();
 
