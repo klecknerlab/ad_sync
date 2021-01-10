@@ -16,7 +16,7 @@ enum BIN_WRITE_TARGETS : int {TARGET_NONE, TARGET_SYNC_DATA, TARGET_SERIAL1, TAR
 // (By converting 1-4 words into a single uint32, we can quickly compare the commands)
 enum CMD_NAMES : uint8_t {
     CMD_NONE, SYNC, READ, WRITE, ADDR, START, STOP, COUNT, RATE, ANA0, ANA1, SER1, SER2,
-    TRIG, MASK, AVAIL, FLUSH, LED, CMD_ON, CMD_OFF, STAT, SET, SCALE, MODE, IDN, 
+    TRIGGER, MASK, AVAIL, FLUSH, LED, CMD_ON, CMD_OFF, STAT, SET, SCALE, MODE, IDN, 
     CMD_INVALID //NOTE: If you add commands, CMD_INVALID MUST be LAST!
 };
 
@@ -106,8 +106,8 @@ class CommandQueue {
         uint32_t word;
         int word_i;
         uint32_t command;
-        uint32_t data[MAX_CMD_INTS];
-        int num_data;
+        uint32_t args[MAX_CMD_INTS];
+        int num_args;
         int bin_data_len;
         int bin_target;
         int bin_data_written;

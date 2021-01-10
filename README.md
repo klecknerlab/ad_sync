@@ -5,29 +5,28 @@ Hardware and software design for a USB-based analog/digital synchronizer board. 
 
 ## Description
 This project is intended to solve a specific problem: synchronizing a laser scanner and camera setup for 3D volumetric imaging.
-To do this, it outputs hardware synchronized digital and analog signals at up to 1 MHz.
-The hardware works by converting a single digital bit stream from the on board ESP32 processor to a series of shift registers (providing 16 digital outputs) and a digital-to-analog converter (providing 16 bit 2 analog channels, ± 10V range).
+To do this, it outputs hardware synchronized digital and analog signals.
+The hardware works by converting a single digital bit stream from the on board ESP32 processor to a series of shift registers and a digital-to-analog converter (with ± 10V range).
 The update rate is tunable from 30 Hz to 700 kHz, with a ~10 PPM accurate clock (provided by the APLL clock on the ESP32).
-
-The output is divided into periods of up to 16384 samples.
-Each output to the device is uploaded as 32 bits: the high 16 bits correspond to the digital outputs, and the low bits correspond to one of the analog outputs.
-Additionally, digital channels can be individually triggered for a given number of periodic cycles.
-
-Presently, only a USB interface is provided for controlling the outputs.
-However, the ESP32 microcontroller has Wifi and Bluetooth capability, and new control modes may be added in the future.
-
-The board also has two RS232 ports, which can be used to talk to additional devices by tunneling the serial commands through the USB connection.
-In the MUVI lab hardware, this is used to configure two laser systems, but should work for any device (so long as it does not require RTS or DTS signals, which are not provided).
 
 The hardware, firmware and software required to run the board is all stored in this repository, with an Apache license.
 If you would like to fabricate, modify, or just use these boards, get in touch!
 
+## Features
+* 16 synchronized digital outputs.  Four are converted to 5 V and output on external BNC or header pin connections
+* 2 synchronized analog outputs, output on BNC or header pins
+* 2 auxiliary serial ports (RS-232 levels), tunneled through the main connection, and which can be used to control additional devices
+* An RGB output LED, controllable through software, to be used as an indicator light
+* A small on-board prototyping area, to add additional functionality
+* Pin headers for various on board signals, including unused GPIO ports on the microcontroller.  (These are not usable without a firmware modification.)
+* Everything is controlled through a single USB port, with simple serial commands.  (In the future, a firmware update may also provide bluetooth and/or wifi connection options; the microcontroller is capable of this but the feature has not been coded)
+
 ## Project Progress
 * [x] Initial board schematics
 * [x] Fabricate test hardware
-* [x] Alpha firmware
-* [ ] Complete firmware
+* [x] Feature complete firmware
 * [x] USB communications
+* [x] Python driver
 * [ ] Wifi connection
 * [ ] Bluetooth connection
 * [x] Aux. serial port connections
@@ -41,68 +40,32 @@ This project contains four directories:
 * `ad_sync`: a Python library to interface with the board through USB. (Note: currently empty.)
 
 ## Python Interface
-**Note: currently a work in progress, and not included in the repository!**
-
 The device is most easily controlled with the provided Python library.
-The basic functions are illustrated in the example code below:
+All of the functions are illustrated in `test.py`, located in this directory.
 
-```python
-import ad_sync
-import numpy as np
-import time
+All of the functions in the communication protocol (described below), also have a corresponding python method with a similar or identical name.
 
-NUM_SAMPLES = 256
-OUTPUT_FREQ = 1E3
-START_ADDR = 0
+## Description of Synchronized Outputs
 
-# Analog outputs are updated half a cycle before the digital outputs; we can
-#   correct for the phase by accounting for this.
-t = np.arange(NUM_SAMPLES) - 0.5
-ana0 = np.sin(2*np.pi * t / NUM_SAMPLES)
+The synchronized outputs are fed from an internal memory of up to 16384 samples.
+Each sample is a 32 bit unsigned integer.
+The high 16 bits are the digital channels, and the low 16 bits are an analog sample.
+Typically, the analog sample should contain the full data range (0-65535), and can be dynamically scaled as the signal is generated.
+(This way you don't need to upload entirely new data to offset or rescale the analog signal.)
 
-# Digital outputs are specified bitwise.
-dig = np.zeros(NUM_SAMPLES, dtype='uint32')
-# Setting SD0 (sync'd digital output 0).  High pulse at t=0
-dig[0] += 1<<0
-# Setting SD1.  High pulse at t=128
-dig[NUM_SAMPLES//2] += 1<<1
-# Setting SD2.  We get a high pulse at t=0, 64, 128, 192
-dig[np.arange(4) * NUM_SAMPLES // 4] += 1<<2
+To specify an output, you first upload an arbitrary amount of data (in Python, use the `write_ad` method).
+You then tell the device where to read from in memory, by specifying a start address and number of samples (`addr` method).
+Additionally, you can specify the output rate in samples/s (`rate` method).
 
-# Open a synchronizer device.
-# !!! You will probably need to change the COM Port !!!
-sync = ad_sync.ADSync("COM3")
-
-# Identify device
-print(sync.idn())
-
-# Stop any output, if active.
-sync.stop()
-
-# Write data
-print(sync.write_ad(START_ADDR, dig, ana0))
-
-# Tell the device to use the data we just wrote
-sync.addr(START_ADDR, NUM_SAMPLES)
-
-# Set the output rate -- in this case we want to signal to run at 100 Hz, so
-#   the output rate = NUM_SAMPLES * OUTPUT_FREQ = 25600 Hz
-print(sync.rate(NUM_SAMPLES * OUTPUT_FREQ))
-
-# Set the output range to go from 1--3 volts
-sync.analog_scale(0, 5, 5)
-
-# Start the sync output
-sync.start()
-
-# Print some stats
-print(sync.stat())
-```
+Finally, you can specify that certain digital channels are triggered.
+Triggered channels will remain low until a trigger is specified (`trigger` method).
+Note that the trigger always starts on the beginning of an output cycle, and can be for one or more cycles.
 
 ## Communication Protocol
 Although the Python library is convenient, it is also possible to talk to the board directly with serial commands through the USB interface (and eventually: bluetooth and wifi, which will use a serial bridge).
 
-**Command structure:** one to three "words", 3-4 letters each, followed by 0-3 integers.  Some commands are also followed by arbitrary length binary data.  All commands are terminated with a linefeed character (`⏎`; this is equivalent to `"\n"` in Python or C).  
+**Command structure:** one to three "words", at most four letters each, followed by 0-3 integers.  Some commands are also followed by arbitrary length binary data.  
+All commands are terminated with a linefeed character (`⏎`; this is equivalent to `"\n"` in Python or C).  
 
 The format for binary appended data is `>[number of bytes]>[binary data]`, and should followed by a line feed character.
 
@@ -169,18 +132,6 @@ Parameters are specified in square brackets, and correspond to unsigned integers
 * `SER[1/2] FLUSH⏎`: Flush the read buffer for a serial port.
 * `SER[1/2] RATE [baud rate]⏎`: Set the baud rate for a serial port.  The serial format is always 8 bits with a start and stop bit.  (This could be changed by altering the firmware, if needed.)
 
-
-**Not yet implemented:**
-
-* `SYNC READ [addr] [samples]⏎`:
-    - Read a specified number of samples from the sync data
-    - Return format is `>[samples*4]>[binary data]⏎`
-    - *Note:* reading a large amount of sync data (> 15 data points) may cause an output glitch in the sync data!
-
-
-
-
-
-
-* `TRIG MASK [bit mask]⏎`: A bit mask indicated if each digital output channel is triggered.  Triggered channels output low until triggered.
-* `TRIG [cycles (optional)]⏎`: Activate the trigger for the specified number of cycles.  `cycles=1` is the default.  Note that there may be a delay of up to 256 samples in outputting a triggered signal, due to the output buffering.  Also, triggers always begin at the beginning of a cycle.
+**Trigger Commands**
+* `TRIGER MASK [bit mask]⏎`: A bit mask indicated if each digital output channel is triggered.  Triggered channels output low until triggered.
+* `TRIGER [cycles (optional)]⏎`: Activate the trigger for the specified number of cycles.  `cycles=1` is the default.  Note that there may be a delay of up to 256 samples in outputting a triggered signal, due to the output buffering.  Also, triggers always begin at the beginning of a cycle.

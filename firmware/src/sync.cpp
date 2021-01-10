@@ -15,6 +15,8 @@ uint32_t sync_data[SYNC_DATA_SIZE];
 int sync_start = 0;
 int sync_cycles = 1024;
 int sync_active = 0;
+int trigger_count = 0;
+uint32_t trigger_mask = 0;
 
 // Internal variables
 static int sync_end = 1024;
@@ -23,7 +25,7 @@ static uint64_t i2s_write_buffer[I2S_WRITE_BUFFER_SIZE];
 static size_t bytes_written = I2S_WRITE_BUFFER_SIZE; // When we've just start up we need to update the output. 
 static int sync_i = 0;
 static int sync_was_active = 0;
-
+static int triggered = 0;
 
 static float APLL_DIV_MIN[NUM_APLL_DIV];
 
@@ -90,7 +92,15 @@ void update_sync() {
                 }
 
                 uint32_t dd = (data & 0xFFFF0000) >> 16;
-                if (digital_sync_mode == 1) { // OR output mode
+
+                // If triggered, all channels output.  
+                // If not, we need to zero the triggered channels
+                if (!triggered) {
+                    dd &= ~trigger_mask;
+                }
+
+                // OR output mode
+                if (digital_sync_mode == 1) { 
                     dd |= (data & 0xFF00) >> 8;
                 }
 
@@ -98,10 +108,16 @@ void update_sync() {
                 // Bits 40-63 are digital output.
                 i2s_write_buffer[i] = ((uint64_t)(dd) << 40) + (ad<<DAC_SHIFT);
 
-                sync_i ++;
+                sync_i = (sync_i + 1) % SYNC_DATA_SIZE;
                 if (sync_i == sync_end) {
                     sync_i = sync_start;
                     sync_end = (sync_start + sync_cycles) % SYNC_DATA_SIZE;
+                    if (trigger_count > 0) {
+                        triggered = 1;
+                        trigger_count --;
+                    } else {
+                        triggered = 0;
+                    }
                 }
             } else {
                 i2s_write_buffer[i] = (DAC_SPI_CH0 + ana0_set) << DAC_SHIFT;

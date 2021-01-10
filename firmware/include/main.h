@@ -95,6 +95,9 @@ extern uint32_t ana0_multiplier, ana0_offset, ana1_multiplier, ana1_offset;
 // Digital output mode
 extern int digital_sync_mode;
 
+// Trigger count
+extern int trigger_count;
+extern uint32_t trigger_mask;
 
 // Function to change frequency
 float sync_freq(float freq);

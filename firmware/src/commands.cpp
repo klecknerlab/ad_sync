@@ -47,8 +47,8 @@ void CommandQueue::reset() {
     cycle = IDLE;
     error = NO_ERROR;
     command = 0;
-    for (int i=0; i<MAX_CMD_INTS; i++) {data[i] = 0;}
-    num_data = 0;
+    for (int i=0; i<MAX_CMD_INTS; i++) {args[i] = 0;}
+    num_args = 0;
     bin_data_len = 0;
     bin_target = TARGET_NONE;
     sync_ptr = (uint8_t*)sync_data;
@@ -89,10 +89,10 @@ void CommandQueue::execute_command() {
     #ifdef CMD_DEBUG
         output_str("Command: ");
         output_int(command);
-        output_str(", Data:");
-        for (int i=0; i<num_data; i++) {
+        output_str(", Args:");
+        for (int i=0; i<num_args; i++) {
             output_str(" ");
-            output_int(data[i]);
+            output_int(args[i]);
         }
         output_eol();
     #endif
@@ -114,7 +114,7 @@ void CommandQueue::execute_command() {
 
             case LED:
                 for (i=0; i<3; i++) {
-                    ledcWrite(i, (LED_LUT[min(data[i], 255)] * LED_TRIM[i]) >> 16);
+                    ledcWrite(i, (LED_LUT[min(args[i], 255)] * LED_TRIM[i]) >> 16);
                 }
                 output_ok();
                 break;
@@ -142,8 +142,8 @@ void CommandQueue::execute_command() {
                 break;
 
             case CMD2(SER1, READ):
-                if (num_data < 1) {n = ser1_buffer_count;}
-                else {n = min(data[0], ser1_buffer_count);}
+                if (num_args < 1) {n = ser1_buffer_count;}
+                else {n = min(args[0], ser1_buffer_count);}
 
                 output_str(">");
                 output_int(n);
@@ -163,8 +163,8 @@ void CommandQueue::execute_command() {
                 break;
 
             case CMD2(SER2, READ):
-                if (num_data < 1) {n = ser2_buffer_count;}
-                else {n = min(data[0], ser2_buffer_count);}
+                if (num_args < 1) {n = ser2_buffer_count;}
+                else {n = min(args[0], ser2_buffer_count);}
 
                 output_str(">");
                 output_int(n);
@@ -184,24 +184,24 @@ void CommandQueue::execute_command() {
                 break;
 
             case CMD2(SER1, RATE):
-                if (num_data != 1) {
+                if (num_args != 1) {
                     error = ERR_WRONG_NUM_ARGS1;
                     output_error();
                 } else {
                     Serial1.end();
-                    Serial1.begin(data[0], SERIAL_8N1, RX1_PIN, TX1_PIN);
+                    Serial1.begin(args[0], SERIAL_8N1, RX1_PIN, TX1_PIN);
                     Serial1.flush();
                     output_str("ok.\n");
                 }
                 break;
 
             case CMD2(SER2, RATE):
-                if (num_data != 1) {
+                if (num_args != 1) {
                     error = ERR_WRONG_NUM_ARGS1;
                     output_error();
                 } else {
                     Serial2.end();
-                    Serial2.begin(data[0], SERIAL_8N1, RX2_PIN, TX2_PIN);
+                    Serial2.begin(args[0], SERIAL_8N1, RX2_PIN, TX2_PIN);
                     Serial2.flush();
                     output_ok();
                 }
@@ -231,7 +231,7 @@ void CommandQueue::execute_command() {
                 output_str("Wrote ");
                 output_int(bin_data_written / 4);
                 output_str(" samples to syncronous data, starting at address ");
-                output_int(data[0]);
+                output_int(args[0]);
                 i = bin_data_written % 4;
                 if (i != 0) {
                     output_str(". (Warning: %d extra bytes written at end!)\n");
@@ -241,60 +241,60 @@ void CommandQueue::execute_command() {
                 break;
 
             case CMD2(ANA0, SET):
-                if (num_data != 1) {
+                if (num_args != 1) {
                     error = ERR_WRONG_NUM_ARGS1;
                     output_error();
                 } else {
-                    ana0_set = data[0];
+                    ana0_set = args[0];
                     analog_update |= 1<<0;
                     output_ok();
                 }
                 break;
 
             case CMD2(ANA1, SET):
-                if (num_data != 1) {
+                if (num_args != 1) {
                     error = ERR_WRONG_NUM_ARGS1;
                     output_error();
                 } else {
-                    ana1_set = data[0];
+                    ana1_set = args[0];
                     analog_update |= 1<<1;
                     output_ok();
                 }
                 break;
 
             case CMD2(ANA0, SCALE):
-                if (num_data != 2) {
+                if (num_args != 2) {
                     error = ERR_WRONG_NUM_ARGS2;
                     output_error();
                 } else {
-                    ana0_multiplier = data[0];
-                    ana0_offset = data[1];
+                    ana0_multiplier = args[0];
+                    ana0_offset = args[1];
                     output_ok();
                 }
                 break;
 
             case CMD2(ANA1, SCALE):
-                if (num_data != 2) {
+                if (num_args != 2) {
                     error = ERR_WRONG_NUM_ARGS2;
                     output_error();
                 } else {
-                    ana1_multiplier = data[0];
-                    ana1_offset = data[1];
+                    ana1_multiplier = args[0];
+                    ana1_offset = args[1];
                     output_ok();
                 }
                 break;
 
             case CMD2(SYNC, MODE):
-                if (num_data == 0) {
+                if (num_args == 0) {
                     output_str("SYNC MODE ");
                     output_int(analog_sync_mode);
                     output_str(" ");
                     output_int(digital_sync_mode);
                     output_eol();
-                } else if (data[0] < 4) {
-                    analog_sync_mode = data[0];
+                } else if (args[0] < 4) {
+                    analog_sync_mode = args[0];
                     analog_update |= (~analog_sync_mode) & 0b11;
-                    digital_sync_mode = ((num_data == 1) || data[1]) ? 1 : 0;
+                    digital_sync_mode = ((num_args == 1) || args[1]) ? 1 : 0;
                     output_ok();
                 } else {
                     error = ERR_INVALID_ARG;
@@ -303,9 +303,9 @@ void CommandQueue::execute_command() {
                 break;
             
             case CMD2(SYNC, ADDR):
-                if ((num_data == 2) && (data[0] < SYNC_DATA_SIZE) && (data[1] < SYNC_DATA_SIZE)) {
-                    sync_start = data[0];
-                    sync_cycles = data[1];
+                if ((num_args == 2) && (args[0] < SYNC_DATA_SIZE) && (args[1] < SYNC_DATA_SIZE)) {
+                    sync_start = args[0];
+                    sync_cycles = args[1];
                     output_ok();
                 } else {
                     error = ERR_INVALID_ADDR;
@@ -326,11 +326,11 @@ void CommandQueue::execute_command() {
                 break;
 
             case CMD2(SYNC, RATE):
-                if ((num_data == 1) || (num_data == 2)) {
-                    float freq = (float)data[0];
+                if ((num_args == 1) || (num_args == 2)) {
+                    float freq = (float)args[0];
 
-                    if (num_data == 2) {
-                        freq += 1E-3 * data[1];
+                    if (num_args == 2) {
+                        freq += 1E-3 * args[1];
                     }
 
                     if ((freq < MIN_FREQ) || (freq > MAX_FREQ)) {
@@ -344,6 +344,27 @@ void CommandQueue::execute_command() {
                     }
                 } else {
                     error = ERR_WRONG_NUM_ARGS2;
+                    output_error();
+                }
+                break;
+
+            case CMD2(TRIGGER, MASK):
+                if (num_args == 1) {
+                    trigger_mask = args[0];
+                    output_ok();
+                } else {
+                    error = ERR_WRONG_NUM_ARGS1;
+                    output_error();
+                }
+                break;
+
+            case TRIGGER:
+                if (num_args <= 1) {
+                    if (num_args == 0) {trigger_count = 1;}
+                    else {trigger_count = args[0];}
+                    output_ok();
+                } else {
+                    error = ERR_WRONG_NUM_ARGS1;
                     output_error();
                 }
                 break;
@@ -407,9 +428,9 @@ void CommandQueue::process_char(char c) {
                         bin_target = TARGET_SERIAL2;
                         break;
                     case CMD2(SYNC, WRITE):
-                        if ((num_data == 1) && (data[0] >= 0) && (data[0] < SYNC_DATA_SIZE)) {
+                        if ((num_args == 1) && (args[0] >= 0) && (args[0] < SYNC_DATA_SIZE)) {
                             bin_target = TARGET_SYNC_DATA;
-                            sync_ptr = (uint8_t*)(sync_data + data[0]);
+                            sync_ptr = (uint8_t*)(sync_data + args[0]);
                         } else {
                             bin_target = TARGET_NONE;
                             error = ERR_INVALID_ADDR;
@@ -442,8 +463,8 @@ void CommandQueue::process_char(char c) {
         if (cycle == IDLE) {
             if (ct == DIGIT) {
                 cycle = READ_INT;
-                data[num_data] = 0;
-                num_data ++;
+                args[num_args] = 0;
+                num_args ++;
                 // Don't return -- this char is processed below.
             } else if (ct == ALPHA) {
                 cycle = READ_WORD;
@@ -471,8 +492,8 @@ void CommandQueue::process_char(char c) {
             if (ct == WHITESPACE) {
                 cycle = IDLE;
             } else if (ct == DIGIT) {
-                if (num_data <= MAX_CMD_INTS) {
-                    data[num_data-1] = data[num_data-1]*10 + ((int)c-48);
+                if (num_args <= MAX_CMD_INTS) {
+                    args[num_args-1] = args[num_args-1]*10 + ((int)c-48);
                 } else {
                     cycle = CMD_ERROR;
                     error = ERR_TOO_MANY_ARGS;
