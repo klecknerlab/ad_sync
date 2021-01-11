@@ -3,6 +3,17 @@
 #define MAIN_H 1
 #include <Arduino.h>
 
+
+// Is Bluetooth enabled at all?
+// #define BLUETOOTH_ENABLED 1
+
+#ifdef BLUETOOTH_ENABLED
+    #if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
+    #error Bluetooth is not enabled! Please run `make menuconfig` to and enable it
+    #endif
+#endif
+
+
 // If defined, print debugging messages.  Not recommended for general use!
 // #define CMD_DEBUG 1
 // #define FREQ_DEBUG 1
@@ -10,6 +21,7 @@
 // Version numbers.
 #define VERSION_MAJOR 1
 #define VERSION_MINOR 0
+
 
 // The output GPIO pin for a variety of functions
 #define RX1_PIN         34
@@ -41,11 +53,12 @@ const uint8_t LED_PINS[3] = {LED_R_PIN, LED_G_PIN, LED_B_PIN};
 #define SYNC_DATA_SIZE  16384 // Sync data storage.  Larger sizes seem to result in memory errors.
 #define I2S_WRITE_BUFFER_SIZE 64 // Used to compute output values
 
+
 // General purpose macros
 #define min(a,b) (((a)<(b))?(a):(b))
 #define max(a,b) (((a)>(b))?(a):(b))
 
-// Bit detph of I2S output 
+// Bit depth of I2S output 
 // Note: if you need to change this, it will require *many* alterations to other parts of the code!
 // (This is just defined for convenience -- don't change it!)
 #define I2S_BIT_DEPTH 24
@@ -102,5 +115,12 @@ extern uint32_t trigger_mask;
 // Function to change frequency
 float sync_freq(float freq);
 
+// Maximum string length for bluetooth serial, to avoid infinite writes
+#ifdef BLUETOOTH_ENABLED
+    #define SERIAL_BT_MAX_WRITE 1024
+    #define BT_NAME_MAX_LENGTH 256
+    extern char bt_name[BT_NAME_MAX_LENGTH+1];
+#endif
+esp_err_t bluetooth_set_name(const char* name);
 
 #endif

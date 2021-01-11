@@ -19,7 +19,8 @@ If you would like to fabricate, modify, or just use these boards, get in touch!
 * An RGB output LED, controllable through software, to be used as an indicator light
 * A small on-board prototyping area, to add additional functionality
 * Pin headers for various on board signals, including unused GPIO ports on the microcontroller.  (These are not usable without a firmware modification.)
-* Everything is controlled through a single USB port, with simple serial commands.  (In the future, a firmware update may also provide bluetooth and/or wifi connection options; the microcontroller is capable of this but the feature has not been coded)
+* Everything is controlled through a USB port *or* Bluetooth conncection, with simple serial commands.  (To enable bluetooth, use `set_bt_name.py`.)
+* In the future, a firmware update may also provide a wifi connection option; the microcontroller is capable of this but the feature has not been coded)
 
 ## Project Progress
 * [x] Initial board schematics
@@ -28,7 +29,7 @@ If you would like to fabricate, modify, or just use these boards, get in touch!
 * [x] USB communications
 * [x] Python driver
 * [ ] Wifi connection
-* [ ] Bluetooth connection
+* [x] Bluetooth connection
 * [x] Aux. serial port connections
 * [ ] Experimental testing and validation
 
@@ -122,7 +123,7 @@ Parameters are specified in square brackets, and correspond to unsigned integers
 **Serial Commands**
 * `SER[1/2] WRITE >[n]>[binary data]⏎`: Write `n` bytes to serial port 1/2.  Replies with: `Wrote [n] bytes of data to serial [1/2].⏎`
 * `SER[1/2] READ [n (optional)]⏎`:
-    -Read at most `n` bytes of data from serial port 1/2  
+    - Read at most `n` bytes of data from serial port 1/2  
     - If `n` is not specified (or `n` is greater than the amount of available data), return all available data.  
     - Call is non-blocking: it will not wait for data to be available
     - Reply format is `>[n]>[n bytes of binary]⏎`  
@@ -134,3 +135,11 @@ Parameters are specified in square brackets, and correspond to unsigned integers
 **Trigger Commands**
 * `TRIGER MASK [bit mask]⏎`: A bit mask indicated if each digital output channel is triggered.  Triggered channels output low until triggered.
 * `TRIGER [cycles (optional)]⏎`: Activate the trigger for the specified number of cycles.  `cycles=1` is the default.  Note that there may be a delay of up to 256 samples in outputting a triggered signal, due to the output buffering.  Also, triggers always begin at the beginning of a cycle.
+
+**Bluetooth Commands**
+* `BLUETOOTH >[n]>[bluetooth name]⏎`:
+    - Set the name of the bluetooth device, and enables it
+    - Name will be saved to internal flash storage, and will remain after a reboot
+    - Name needs to be sent as binary, should be <= 64 bytes (or an error is raised)
+    - Replies with `Bluetooth enabled with name: [bluetooth name]⏎`
+    - Setting the name to an empty string disables the device (e.g. `BLUETOOTH⏎`)

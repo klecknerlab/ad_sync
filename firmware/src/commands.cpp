@@ -103,6 +103,10 @@ void CommandQueue::execute_command() {
         int i, n;
         char tmp_char;
 
+        #ifdef BLUETOOTH_ENABLED
+            esp_err_t err;
+        #endif
+
         switch (command) {
             case IDN:
                 output_str("USB analog/digital synchronizer (version ");
@@ -369,6 +373,28 @@ void CommandQueue::execute_command() {
                 }
                 break;
 
+            case BLUETOOTH:
+                #ifdef BLUETOOTH_ENABLED
+                    bt_name[bin_data_written] = 0; // Zero terminate string
+                    err = bluetooth_set_name(bt_name);
+                    if (err != ESP_OK) {
+                        output_str("ERROR: failed to write bluetooth name to device (");
+                        output_str(esp_err_to_name(err));
+                        output_str(")\n");
+                    } else {
+                        if (bt_name[0]) {
+                            output_str("Bluetooth enabled with name: ");
+                            output_str(bt_name);
+                            output_eol();
+                        } else {
+                            output_str("Bluetooth disabled.\n");
+                        }
+                    }
+                #else
+                    output_str("ERROR: Bluetooth currently disabled in firmare\n");
+                #endif
+                break;
+
             default:
                 error = ERR_INVALID_COMMAND;
                 output_error();
@@ -395,6 +421,16 @@ void CommandQueue::process_char(char c) {
                 break;
             case TARGET_SERIAL2:
                 Serial2.write(c);
+                break;
+            case TARGET_BT_NAME:
+                #ifdef BLUETOOTH_ENABLED
+                    if (bin_data_written >= BT_NAME_MAX_LENGTH) {
+                        error = ERR_BT_NAME_TOO_LONG;
+                        bin_target = TARGET_NONE;
+                    } else {
+                        bt_name[bin_data_written] = c;
+                    }
+                #endif
                 break;
         }
 
@@ -435,6 +471,9 @@ void CommandQueue::process_char(char c) {
                             bin_target = TARGET_NONE;
                             error = ERR_INVALID_ADDR;
                         }
+                        break;
+                    case BLUETOOTH:
+                        bin_target = TARGET_BT_NAME;
                         break;
                     default:
                         cycle = CMD_ERROR;

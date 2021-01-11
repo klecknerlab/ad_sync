@@ -21,7 +21,7 @@ Example: "python test.py COM3" """
 port = sys.argv[1]
 
 NUM_SAMPLES = 256
-OUTPUT_FREQ = 1E3
+OUTPUT_FREQ = 100
 
 # Start address for data output
 # In practice, you'd probably start at 0, but as an example...

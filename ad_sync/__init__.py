@@ -424,6 +424,26 @@ class ADSync:
                 'SER AVAIL returned "%s" (should have been an int)' % reply
             )
 
+    def bluetooth(self, name=None):
+        """
+        Enable or disable bluetooth connection.
+
+        Note: once set, the device will remember the bluetooth settings upon
+        reboot!
+
+        Keywords
+        --------
+        name : str or None (default: None)
+            If a string is passed, enabled the bluetooth connection with the
+            given name.  If None is passed, disable the bluetooth connection
+        """
+        if name:
+            name = np.fromstring(name, dtype='u1')
+        else:
+            name = None
+        self._cmd("BLUETOOTH", name)
+        return self._reply()
+
     def close(self):
         "Close the serial port associated with the device."
         self.ser.close()

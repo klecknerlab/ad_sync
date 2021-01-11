@@ -9,14 +9,14 @@ enum CHAR_TYPES : int {WHITESPACE, EOL, ALPHA, DIGIT, BINSTART};
 
 // States of the input character processor
 enum CMD_CYCLES : int {IDLE, READ_WORD, READ_INT, READ_BIN, READ_BIN_LEN, CMD_ERROR};
-enum BIN_WRITE_TARGETS : int {TARGET_NONE, TARGET_SYNC_DATA, TARGET_SERIAL1, TARGET_SERIAL2};
+enum BIN_WRITE_TARGETS : int {TARGET_NONE, TARGET_SYNC_DATA, TARGET_SERIAL1, TARGET_SERIAL2, TARGET_BT_NAME};
 
 // Constants for the different commands
 // The commands each has a 1 byte code, determined here.
 // (By converting 1-4 words into a single uint32, we can quickly compare the commands)
 enum CMD_NAMES : uint8_t {
     CMD_NONE, SYNC, READ, WRITE, ADDR, START, STOP, COUNT, RATE, ANA0, ANA1, SER1, SER2,
-    TRIGGER, MASK, AVAIL, FLUSH, LED, CMD_ON, CMD_OFF, STAT, SET, SCALE, MODE, IDN, 
+    TRIGGER, MASK, AVAIL, FLUSH, LED, CMD_ON, CMD_OFF, STAT, SET, SCALE, MODE, IDN, BLUETOOTH,
     CMD_INVALID //NOTE: If you add commands, CMD_INVALID MUST be LAST!
 };
 
@@ -52,6 +52,7 @@ static const uint32_t CMD_WORDS[NUM_CMD] = {
     CMD_UINT("SCAL"),
     CMD_UINT("MODE"),
     CMD_UINT("*IDN"),
+    CMD_UINT("BLUE"),
 };
 
 // Routines for packing command words into a command "sentence"
@@ -78,6 +79,7 @@ enum CMD_ERRORS : int {
     ERR_MISSING_ARG,
     ERR_WRONG_NUM_ARGS1,
     ERR_WRONG_NUM_ARGS2,
+    ERR_BT_NAME_TOO_LONG,
 };
 
 // Error outputs for each type.
@@ -95,6 +97,7 @@ static const char* ERROR_STR[] = {
     "missing argument",
     "wrong number of arguments (should be 1)",
     "wrong number of arguments (should be 2)",
+    "bluetooth name too long (64 chars max)"
 };
 
 #define STR_BUF_LEN 65
