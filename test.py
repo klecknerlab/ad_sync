@@ -25,7 +25,7 @@ OUTPUT_FREQ = 100
 
 # Start address for data output
 # In practice, you'd probably start at 0, but as an example...
-START_ADDR = 1000
+START_ADDR = 0
 
 # Analog outputs are updated half a cycle before the digital outputs; we can
 #   correct for the phase by accounting for this.
@@ -42,7 +42,8 @@ dig[NUM_SAMPLES//2] += 1 << 1
 dig[np.arange(4) * NUM_SAMPLES // 4] += 1 << 2
 
 # Open a synchronizer device.
-sync = ad_sync.ADSync(port)
+# Set debug=True if you want to snoop on the communications
+sync = ad_sync.ADSync(port, debug=False)
 
 # Identify device
 print(sync.idn())
@@ -95,25 +96,34 @@ sync.led(0, 0, 0)
 # Print some stats
 print(sync.stat())
 
+# sys.exit()
+
+
+SERIAL_PORTS = (1, 2)
+
 # Lets try reading/writing from the attached serial ports
 # Note: unlike other outputs, the tunneled serial ports are numbered 1 and 2
 # There *is* a ser0, but this is the main USB communications, which you can't
 #   access through a tunnel.
-for n in (1, 2):
+for n in SERIAL_PORTS:
     # Set the baud rate of each channel
-    sync.ser_baud(n, 115200)
+    sync.ser_baud(n, 9600)
+    # pass
     # And flush anything in there already
     sync.ser_flush(n)
 
 # Write to each channel
-for n in (1, 2):
-    sync.ser_write(n, f"Hello from serial port {n}!\n")
+for n in SERIAL_PORTS:
+    sync.ser_write(n, f"Hello from serial port {n} ({'un' if n == 1 else 'deux'})!\nMulti-lines and weird chars (☺) supported!")
 
 # Give the serial port time to send/receive
 time.sleep(0.1)
 
 # Read from each channel.  To get something to appear, connect RX <-> TX on
 #    two channels.
-for n in (1, 2):
-    reply = repr(sync.ser_read(n))
+
+for n in SERIAL_PORTS:
+    avail = repr(sync.ser_available(n))
+    print(f"Serial {n} has {avail} bytes ready to read.")
+    reply = sync.ser_read(n).decode('utf-8')
     print(f"Serial {n} returned: {reply}")

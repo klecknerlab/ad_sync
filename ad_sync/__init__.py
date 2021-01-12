@@ -10,7 +10,7 @@ class ADSync:
     ANALOG_RANGE = 20
     ANALOG_MAX = 65536
 
-    def __init__(self, port, baud=115200, timeout=0.5):
+    def __init__(self, port, baud=115200, timeout=0.5, debug=False):
         """
         Initialize a AD sync device.
 
@@ -23,7 +23,10 @@ class ADSync:
         --------
         baud : int (default: 115200)
         timeout : float (default: 0.1)
+        debug : bool (default: False)
+            If true, prints out all serial communcation with the device.
         """
+        self.debug = debug
         self.ser = serial.Serial(port=None, baudrate=baud, timeout=timeout)
         self.ser.port = port
         self.ser.rts = False
@@ -65,7 +68,53 @@ class ADSync:
         cmd = b' '.join(cmd) + b'\n'
         self.ser.write(cmd)
 
+        self._last_cmd = cmd
+
+        if self.debug:
+            print("Wrote to device: ", cmd)
+
         return cmd
+
+    def _reply(self):
+        reply = self.ser.readline().strip()
+        if reply.startswith(b'ERROR:'):
+            lc = self._last_cmd
+            if len(lc) > 31:
+                lc = lc[:28] + b'...'
+            raise ADSyncError(reply[6:].decode('utf-8').strip()
+                + "\n(serial command: %s)" % repr(lc))
+
+        if self.debug:
+            print("Received from device ", reply)
+
+        return reply
+
+    def _bin_reply(self, err=True):
+        c = self.ser.read()
+        if c == b'>':
+            header = self.ser.read_until(b'>')
+            try:
+                nbytes = int(header[:-1])
+            except ValueError:
+                raise ADSyncError(
+                    'expected binary reply, device returned invalid size' %
+                    (c + header)
+                )
+            data = self.ser.read(nbytes)
+            # Should be a newline at the end -> lets flush it
+            self.ser.readline()
+            return data
+
+        else:
+            # This is not a binary reply!  Just treat it normally (prob. error)
+            reply = c + self.ser.readline().strip()
+            if reply.startswith(b'ERROR:'):
+                raise ADSyncError(reply[6:].decode('utf-8').strip())
+            elif err:
+                raise ADSyncError(
+                    'expected binary reply, device returned "%s"' % reply
+                )
+            return reply
 
     def start(self):
         "Start the sync output."
@@ -281,39 +330,6 @@ class ADSync:
         """
         self._cmd("LED", r, g, b)
         self._reply()
-
-    def _reply(self):
-        reply = self.ser.readline().strip()
-        if reply.startswith(b'ERROR:'):
-            raise ADSyncError(reply[6:].decode('utf-8').strip())
-        return reply
-
-    def _bin_reply(self, err=True):
-        c = self.ser.read()
-        if c == b'>':
-            header = self.ser.read_until(b'>')
-            try:
-                nbytes = int(header[:-1])
-            except ValueError:
-                raise ADSyncError(
-                    'expected binary reply, device returned invalid size' %
-                    (c + header)
-                )
-            data = self.ser.read(nbytes)
-            # Should be a newline at the end -> lets flush it
-            self.ser.readline()
-            return data
-
-        else:
-            # This is not a binary reply!  Just treat it normally (prob. error)
-            reply = c + self.ser.readline().strip()
-            if reply.startswith(b'ERROR:'):
-                raise ADSyncError(reply[6:].decode('utf-8').strip())
-            elif err:
-                raise ADSyncError(
-                    'expected binary reply, device returned "%s"' % reply
-                )
-            return reply
 
     def _send_bin(self, data):
         if isinstance(data, np.ndarray):

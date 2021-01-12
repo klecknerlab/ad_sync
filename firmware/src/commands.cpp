@@ -9,16 +9,15 @@ int char_type(char c) {
     else return ALPHA; // Treat everything else as "alphabetical", including symbols
 }
 
-CommandQueue::CommandQueue(void (*func_ptr)(const char *)) {
-    output_str = func_ptr;
+CommandQueue::CommandQueue() {
     sync_end = (uint8_t*) (sync_data + SYNC_DATA_SIZE);
-    init();
     reset();
 }
 
-void CommandQueue::output_float(float x) {
+int CommandQueue::output_float(float x) {
+    int nbytes = 0;
     int ipart = (int)x;
-    output_int(ipart); //Note: the int gets put in str_buffer!
+    nbytes += output_int(ipart); //Note: the int gets put in str_buffer!
 
     // Find the number of digits by snooping in the str_buffer
     int dig;
@@ -28,7 +27,7 @@ void CommandQueue::output_float(float x) {
 
     int dp = 7 - dig; // Print 7 sig figs
     if (dp > 0) {
-        output_str(".");
+        nbytes += output_buffer.write(".");
         float frac = x - ipart;
         for (int i=0; i<dp; i++) {frac *= 10;}
         // We *could* round the fractional part, but this *might* also affect the ipart, so it's too late!
@@ -38,9 +37,11 @@ void CommandQueue::output_float(float x) {
         for (dig=0; dig<STR_BUF_LEN; dig++) {
             if (str_buffer[dig] == 0) {break;}
         }
-        for (int i=dig; i<dp; i++) {output_str("0");}
-        output_str(str_buffer);
+        for (int i=dig; i<dp; i++) {output_buffer.write("0");}
+        nbytes += output_buffer.write(str_buffer);
     }
+
+    return nbytes;
 }
 
 void CommandQueue::reset() {
@@ -60,7 +61,7 @@ void CommandQueue::finish_word() {
     //     str_buffer[i] = (word >> ((3-i)*8)) & (0xFF);
     // }
     // str_buffer[4] = 0;
-    // output_str(str_buffer);
+    // output_buffer.write(str_buffer);
     // output_eol();
 
     int word_id = CMD_INVALID;
@@ -77,21 +78,23 @@ void CommandQueue::finish_word() {
     cycle = IDLE;
 }
 
-void CommandQueue::output_error() {
-    output_str("ERROR: ");
-    output_str(ERROR_STR[error]);
-    output_eol();
+int CommandQueue::output_error() {
+    int nbytes = 0;
+    nbytes += output_buffer.write("ERROR: ");
+    nbytes += output_buffer.write(ERROR_STR[error]);
+    nbytes += output_eol();
+    return nbytes;
 }
 
 void CommandQueue::execute_command() {
     if (cycle == READ_WORD) {finish_word();}
 
     #ifdef CMD_DEBUG
-        output_str("Command: ");
+        output_buffer.write("Command: ");
         output_int(command);
-        output_str(", Args:");
+        output_buffer.write(", Args:");
         for (int i=0; i<num_args; i++) {
-            output_str(" ");
+            output_buffer.write(" ");
             output_int(args[i]);
         }
         output_eol();
@@ -101,7 +104,6 @@ void CommandQueue::execute_command() {
         output_error();
     } else {
         int i, n;
-        char tmp_char;
 
         #ifdef BLUETOOTH_ENABLED
             esp_err_t err;
@@ -109,11 +111,11 @@ void CommandQueue::execute_command() {
 
         switch (command) {
             case IDN:
-                output_str("USB analog/digital synchronizer (version ");
+                output_buffer.write("USB analog/digital synchronizer (version ");
                 output_int(VERSION_MAJOR);
-                output_str(".");
+                output_buffer.write(".");
                 output_int(VERSION_MINOR);
-                output_str(").\n");
+                output_buffer.write(").\n");
                 break;
 
             case LED:
@@ -124,67 +126,47 @@ void CommandQueue::execute_command() {
                 break;
 
             case CMD2(SER1, WRITE):
-                output_str("Wrote ");
+                output_buffer.write("Wrote ");
                 output_int(bin_data_written);
-                output_str(" bytes to serial 1.\n");
+                output_buffer.write(" bytes to serial 1.\n");
                 break;
 
             case CMD2(SER2, WRITE):
-                output_str("Wrote ");
+                output_buffer.write("Wrote ");
                 output_int(bin_data_written);
-                output_str(" bytes to serial 2.\n");
+                output_buffer.write(" bytes to serial 2.\n");
                 break;
 
             case CMD2(SER1, AVAIL):
-                output_int(ser1_buffer_count);
+                output_int(ser1_input.available);
                 output_eol();
                 break;
 
             case CMD2(SER2, AVAIL):
-                output_int(ser2_buffer_count);
+                output_int(ser2_input.available);
                 output_eol();
                 break;
 
             case CMD2(SER1, READ):
-                if (num_args < 1) {n = ser1_buffer_count;}
-                else {n = min(args[0], ser1_buffer_count);}
+                n = min(ser1_input.available, (SER_BUFFER_SIZE - output_buffer.available) - 10);
+                if (num_args >= 1) {n = min(args[0], n);}
 
-                output_str(">");
+                output_buffer.write(">");
                 output_int(n);
-                output_str(">");
-                tmp_char = ser1_buffer[n];
-                ser1_buffer[n] = 0;
-                output_str(ser1_buffer);
-                ser1_buffer[n] = tmp_char;
+                output_buffer.write(">");
+                ser1_input.to_stream(output_buffer);
                 output_eol();
-
-                // Shift data back if needed
-                for (int i=(ser1_buffer_count-n); i>=0; i--) {
-                    ser1_buffer[i] = ser1_buffer[i+n];
-                }
-                ser1_buffer_count -= n;
-
                 break;
 
             case CMD2(SER2, READ):
-                if (num_args < 1) {n = ser2_buffer_count;}
-                else {n = min(args[0], ser2_buffer_count);}
+                n = min(ser2_input.available, (SER_BUFFER_SIZE - output_buffer.available) - 10);
+                if (num_args >= 1) {n = min(args[0], n);}
 
-                output_str(">");
+                output_buffer.write(">");
                 output_int(n);
-                output_str(">");
-                tmp_char = ser2_buffer[n];
-                ser2_buffer[n] = 0;
-                output_str(ser2_buffer);
-                ser2_buffer[n] = tmp_char;
+                output_buffer.write(">");
+                ser2_input.to_stream(output_buffer);
                 output_eol();
-
-                // Shift data back if needed
-                for (int i=(ser2_buffer_count-n); i>=0; i--) {
-                    ser1_buffer[i] = ser2_buffer[i+n];
-                }
-                ser2_buffer_count -= n;
-
                 break;
 
             case CMD2(SER1, RATE):
@@ -194,8 +176,11 @@ void CommandQueue::execute_command() {
                 } else {
                     Serial1.end();
                     Serial1.begin(args[0], SERIAL_8N1, RX1_PIN, TX1_PIN);
+                    // Due to a hardware and/or software bug, resetting Serial 1 disables the i2c output on pins 16/17
+                    // This can be fixed by resetting the pin config for I2S
+                    i2s_set_pin(I2S_NUM_0, &pin_config);
                     Serial1.flush();
-                    output_str("ok.\n");
+                    output_buffer.write("ok.\n");
                 }
                 break;
 
@@ -212,35 +197,38 @@ void CommandQueue::execute_command() {
                 break;
 
             case CMD2(SER1, FLUSH):
-                ser1_buffer_count = 0;
+                ser1_input.flush();
+                ser1_output.flush();
                 output_ok();
                 break;
 
             case CMD2(SER2, FLUSH):
-                ser2_buffer_count = 0;
+                ser2_input.flush();
+                ser2_output.flush();
                 output_ok();
                 break;
 
             case CMD2(SYNC, STAT):
-                output_str("I2S: wrote ");
+                output_buffer.write("I2S: wrote ");
                 output_int(last_bytes_written);
-                output_str(" bytes ");
+                output_buffer.write(" bytes ");
                 output_int(cycles_since_write);
-                output_str(" cycles ago (");
+                output_buffer.write(" cycles ago (");
                 output_int(buffer_update_time);
-                output_str(" us to update buffer)\n");
+                output_buffer.write(" us to update buffer)\n");
                 break;
 
             case CMD2(SYNC, WRITE):
-                output_str("Wrote ");
+                // Note: the data is actually written in the command character processing function!
+                output_buffer.write("Wrote ");
                 output_int(bin_data_written / 4);
-                output_str(" samples to syncronous data, starting at address ");
+                output_buffer.write(" samples to syncronous data, starting at address ");
                 output_int(args[0]);
                 i = bin_data_written % 4;
                 if (i != 0) {
-                    output_str(". (Warning: %d extra bytes written at end!)\n");
+                    output_buffer.write(". (Warning: %d extra bytes written at end!)\n");
                 } else {
-                    output_str(".\n");
+                    output_buffer.write(".\n");
                 }
                 break;
 
@@ -290,9 +278,9 @@ void CommandQueue::execute_command() {
 
             case CMD2(SYNC, MODE):
                 if (num_args == 0) {
-                    output_str("SYNC MODE ");
+                    output_buffer.write("SYNC MODE ");
                     output_int(analog_sync_mode);
-                    output_str(" ");
+                    output_buffer.write(" ");
                     output_int(digital_sync_mode);
                     output_eol();
                 } else if (args[0] < 4) {
@@ -342,9 +330,9 @@ void CommandQueue::execute_command() {
                         output_error();
                     } else {
                         freq = sync_freq(freq);
-                        output_str("SYNC RATE = ");
+                        output_buffer.write("SYNC RATE = ");
                         output_float(freq);
-                        output_str(" Hz\n");
+                        output_buffer.write(" Hz\n");
                     }
                 } else {
                     error = ERR_WRONG_NUM_ARGS2;
@@ -378,20 +366,20 @@ void CommandQueue::execute_command() {
                     bt_name[bin_data_written] = 0; // Zero terminate string
                     err = bluetooth_set_name(bt_name);
                     if (err != ESP_OK) {
-                        output_str("ERROR: failed to write bluetooth name to device (");
-                        output_str(esp_err_to_name(err));
-                        output_str(")\n");
+                        output_buffer.write("ERROR: failed to write bluetooth name to device (");
+                        output_buffer.write(esp_err_to_name(err));
+                        output_buffer.write(")\n");
                     } else {
                         if (bt_name[0]) {
-                            output_str("Bluetooth enabled with name: ");
-                            output_str(bt_name);
+                            output_buffer.write("Bluetooth enabled with name: ");
+                            output_buffer.write(bt_name);
                             output_eol();
                         } else {
-                            output_str("Bluetooth disabled.\n");
+                            output_buffer.write("Bluetooth disabled.\n");
                         }
                     }
                 #else
-                    output_str("ERROR: Bluetooth currently disabled in firmare\n");
+                    output_buffer.write("ERROR: Bluetooth currently disabled in firmare\n");
                 #endif
                 break;
 
@@ -417,10 +405,10 @@ void CommandQueue::process_char(char c) {
                 }
                 break;
             case TARGET_SERIAL1:
-                Serial1.write(c);
+                ser1_output.write(c);
                 break;
             case TARGET_SERIAL2:
-                Serial2.write(c);
+                ser2_output.write(c);
                 break;
             case TARGET_BT_NAME:
                 #ifdef BLUETOOTH_ENABLED
@@ -460,21 +448,25 @@ void CommandQueue::process_char(char c) {
                     case CMD2(SER1, WRITE):
                         bin_target = TARGET_SERIAL1;
                         break;
+
                     case CMD2(SER2, WRITE):
                         bin_target = TARGET_SERIAL2;
                         break;
+
                     case CMD2(SYNC, WRITE):
                         if ((num_args == 1) && (args[0] >= 0) && (args[0] < SYNC_DATA_SIZE)) {
                             bin_target = TARGET_SYNC_DATA;
-                            sync_ptr = (uint8_t*)(sync_data + args[0]);
+                            sync_ptr = (uint8_t *)(sync_data + args[0]);
                         } else {
                             bin_target = TARGET_NONE;
                             error = ERR_INVALID_ADDR;
                         }
                         break;
+
                     case BLUETOOTH:
                         bin_target = TARGET_BT_NAME;
                         break;
+
                     default:
                         cycle = CMD_ERROR;
                         error = ERR_EXTRA_BIN_DATA;

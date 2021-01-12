@@ -116,21 +116,25 @@ class CommandQueue {
         int bin_data_written;
         uint8_t *sync_ptr;
         uint8_t *sync_end;
-        void (*output_str)(const char*);
+
         char str_buffer[STR_BUF_LEN];
 
-        void output_int(int x) {output_str(itoa(x, str_buffer, 10));}
-        void output_eol() {output_str("\n");}
-        void output_ok() {output_str("ok.\n");}
-        void output_error();
-        void output_float(float x);
+        // int output(const char* s) {return output_buffer.write((uint8_t *)s);}
+        // int output_c
+        // int output(const char* s, int nbytes) {return output_buffer.write((uint8_t *)s, nbytes);}
+        int output_int(int x) {return output_buffer.write(itoa(x, str_buffer, 10));}
+        int output_eol() {return output_buffer.write("\n", 1);}
+        int output_ok() {return output_buffer.write("ok.\n", 4);}
+        int output_error();
+        int output_float(float x);
         void finish_word();
         void execute_command();
 
     public:
+        CircularBuffer output_buffer;
         int error;
 
-        CommandQueue(void (*func_ptr)(const char *)); // Define an output stream
+        CommandQueue(); // Define an output stream
         void reset(); // Resets the internal state; used to start a new command
         void process_char(char c); // Process a single input character
         const char* error_str(int error) {return ERROR_STR[error];} // Return an error string

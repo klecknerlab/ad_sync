@@ -23,9 +23,6 @@
 #define APLL_XTAL 40000000
 #define NUM_APLL_DIV 36
 
-// I2S config options
-#include "driver/i2s.h"
-
 // Used to get rtc_clk_apll_enable
 #include <soc/rtc.h>
 
@@ -42,12 +39,6 @@ const i2s_config_t i2s_config = {
     .use_apll = true,
 };
 
-const i2s_pin_config_t pin_config = {
-    .bck_io_num = I2S_CLK_PIN,
-    .ws_io_num = I2S_WS_PIN,
-    .data_out_num = I2S_SD_PIN,
-    .data_in_num = -1,
-};
 
 static const uint8_t APLL_DIV[NUM_APLL_DIV][3] = {
     { 0,  2,  2}, { 1,  2,  2}, { 2,  2,  2}, { 4,  2,  2}, { 6,  2,  2}, 

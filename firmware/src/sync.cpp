@@ -54,6 +54,9 @@ void init_sync() {
     }
 
     sync_freq(102400.0);
+
+    Serial.write("Output task running on CPU core ");
+    Serial.println(xPortGetCoreID());
 }
 
 void update_sync() {

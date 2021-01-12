@@ -127,10 +127,12 @@ Parameters are specified in square brackets, and correspond to unsigned integers
     - If `n` is not specified (or `n` is greater than the amount of available data), return all available data.  
     - Call is non-blocking: it will not wait for data to be available
     - Reply format is `>[n]>[n bytes of binary]⏎`  
-    - *Note:* a very large serial read *might* cause an output glitch.  If the reply length is < 60 bytes this should not be a concern.
 * `SER[1/2] AVAIL⏎`: Return the number of bytes available to be read at that serial port.  Reply format: `[n]⏎`
 * `SER[1/2] FLUSH⏎`: Flush the read buffer for a serial port.
-* `SER[1/2] RATE [baud rate]⏎`: Set the baud rate for a serial port.  The serial format is always 8 bits with a start and stop bit.  (This could be changed by altering the firmware, if needed.)
+* `SER[1/2] RATE [baud rate]⏎`:
+    - Set the baud rate for a serial port  
+    - The serial format is always 8 bits with a start and stop bit.  (This could be changed by altering the firmware, if needed.)
+    - *Note:* Changing the Baud rate of Serial Port 1 will cause an output glitch on the sync outputs.  Unfortunately this is a hardware bug on the microcontroller, which is not correctable!
 
 **Trigger Commands**
 * `TRIGER MASK [bit mask]⏎`: A bit mask indicated if each digital output channel is triggered.  Triggered channels output low until triggered.

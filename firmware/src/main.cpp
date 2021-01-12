@@ -4,9 +4,6 @@
 #include "main.h"
 #include "commands.h"
 #include "sync.h"
-#ifdef BLUETOOTH_ENABLED
-    #include "BluetoothSerial.h"
-#endif
 #include "esp_system.h"
 #include "nvs_flash.h"
 #include "nvs.h"
@@ -18,14 +15,20 @@ char ser2_buffer[SER_BUFFER_SIZE+1];
 int ser2_buffer_count = 0;
 uint16_t LED_LUT[256];
 
+// Set up the serial input/output buffers
+// Note: these are in *addition* to the Arduino serial buffers.
+// This provides a non-blocking method for large reads/writes
+CircularBuffer ser0_output, ser1_input, ser1_output, ser2_input, ser2_output;
+
 // Bluetooth setup
 #ifdef BLUETOOTH_ENABLED
     char bt_name[BT_NAME_MAX_LENGTH+1];
     BluetoothSerial SerialBT;
     static int bt_enabled = 0;
+    CircularBuffer serbt_output;
 #endif
 
-
+TaskHandle_t command_task;         
 
 void setup()
 {
@@ -72,6 +75,7 @@ void setup()
             Serial.write(esp_err_to_name(err));
             Serial.write("'\n");
         }
+
         err = nvs_get_str(nvs, "name", bt_name, &bt_name_len);
         switch (err) {
             case ESP_OK:
@@ -96,11 +100,6 @@ void setup()
 
     // Init the sync code (see sync.cpp)
     init_sync();
-
-    // Create some example sync data.
-    for (int i=0; i<1024; i++) {
-        sync_data[i] = ((uint32_t)i<<16) + (i<<6);
-    }
 }
 
 esp_err_t bluetooth_set_name(const char* name) {
@@ -129,23 +128,11 @@ esp_err_t bluetooth_set_name(const char* name) {
 }
 
 // Create a static serial function so we can pass it to a command queue.
-void serial_write(const char* s) {Serial.write(s);}
-CommandQueue serial_commands(serial_write);
+// void serial_write(const char* s) {Serial.write(s);}
+CommandQueue serial_commands;
 
 #ifdef BLUETOOTH_ENABLED
-    // Ditto for bluetooth
-    void serial_bt_write(const char* s) {
-        char c;
-        for (int i=0; i<SERIAL_BT_MAX_WRITE; i++) {
-            c = s[i];
-            if (c == 0) {
-                break;
-            } else {
-                SerialBT.write(c);
-            }
-        }
-    }
-    CommandQueue serial_bt_commands(serial_bt_write);
+    CommandQueue serial_bt_commands;
 #endif
 
 // Note: multiple command queues can operate simultaneously.
@@ -155,37 +142,41 @@ CommandQueue serial_commands(serial_write);
 
 void loop()
 {
-    int n;
+    // This loops processes all the command queues, and updates the DMA for the sync
+    // Note that update_sync should return quickly if there is nothing to do; it's better
+    //  to run it a lot to avoid corrupting the output.
 
-    // Process incoming commands.  Reply is automatic when a command is complete. 
-    // (Output is handled through the function passed on the creation of the CommandQueue object.)
+    // Process input commands from USB
     for (int i=Serial.available(); i>0; i--) {
         int c = Serial.read();
         if (c >= 0) {serial_commands.process_char((char)c);}
         else {break;}
-        // Serial.write((char)c); //echo for debugging
     }
+    update_sync();
+    serial_commands.output_buffer.to_stream(Serial);
+    update_sync();
 
+    // Procuess input commands from Bluetooth
     #ifdef BLUETOOTH_ENABLED
     if (bt_enabled) {
         for (int i=SerialBT.available(); i>0; i--) {
             int c = SerialBT.read();
             if (c >= 0) {serial_bt_commands.process_char((char)c);}
             else {break;}
-            // Serial.write((char)c); //echo for debugging
         }
+        update_sync();
+        serial_bt_commands.output_buffer.to_stream(SerialBT);
+        update_sync();
     }
     #endif
 
-    // Check if there is anything in the serial buffers, and update as needed.
-    // Note: here we are moving data from the Arduino buffer (64 chars) to a larger secondary buffer.
-    n = min(Serial1.available(), SER_BUFFER_SIZE - ser1_buffer_count);
-    if (n) {ser1_buffer_count += Serial1.readBytes(ser1_buffer + ser1_buffer_count, n);}
+    // Handle aux serial inputs/outputs
+    // Should be pretty fast!
+    ser1_output.to_stream(Serial1);
+    ser2_output.to_stream(Serial2);
+    ser1_input.from_stream(Serial1);
+    ser2_input.from_stream(Serial2);
 
-    n = min(Serial2.available(), SER_BUFFER_SIZE - ser2_buffer_count);
-    if (n) {ser2_buffer_count += Serial2.readBytes(ser2_buffer + ser2_buffer_count, n);}
-
-    // Update the sync outputs.
-    // All settings are controlled through global variables.
     update_sync();
 }
+
