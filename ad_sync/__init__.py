@@ -1,5 +1,6 @@
 import serial
 import numpy as np
+import time
 
 
 class ADSyncError(Exception):
@@ -32,6 +33,19 @@ class ADSync:
         self.ser.rts = False
         self.ser.dtr = False
         self.ser.open()
+
+    def reset(self):
+        """
+        Reset the device.
+
+        Note: this works by activing the RTS bit on the serial port, which
+        will *not* work over bluetooth!
+        """
+        self.ser.rts = True
+        time.sleep(0.5)
+        self.ser.rts = False
+        time.sleep(1.0)
+        self.ser.flush()
 
     def idn(self):
         "Return identification string."

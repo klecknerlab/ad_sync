@@ -21,11 +21,11 @@ Example: "python test.py COM3" """
 port = sys.argv[1]
 
 NUM_SAMPLES = 256
-OUTPUT_FREQ = 100
+OUTPUT_FREQ = 1000
 
 # Start address for data output
 # In practice, you'd probably start at 0, but as an example...
-START_ADDR = 0
+START_ADDR = 100
 
 # Analog outputs are updated half a cycle before the digital outputs; we can
 #   correct for the phase by accounting for this.
@@ -44,6 +44,10 @@ dig[np.arange(4) * NUM_SAMPLES // 4] += 1 << 2
 # Open a synchronizer device.
 # Set debug=True if you want to snoop on the communications
 sync = ad_sync.ADSync(port, debug=False)
+
+# Reset the device
+# Only works over direct serial connection!
+# sync.reset()
 
 # Identify device
 print(sync.idn())
@@ -70,12 +74,12 @@ sync.analog_scale(0, 2, 1)
 sync.analog_set(1, 3)
 
 # Set the output rate -- in this case we want to signal to run at 100 Hz, so
-#   the output rate = NUM_SAMPLES * OUTPUT_FREQ = 25600 Hz
+#   the output rate = NUM_SAMPLES * OUTPUT_FREQ
 # The rate won't be exact; but it should be within a few PPM
 print(sync.rate(NUM_SAMPLES * OUTPUT_FREQ))
 
 # Trigger channel 2
-sync.trigger_mask(2 << 1)
+sync.trigger_mask(1<<2)
 
 # Start the sync output
 sync.start()
@@ -96,8 +100,7 @@ sync.led(0, 0, 0)
 # Print some stats
 print(sync.stat())
 
-# sys.exit()
-
+sys.exit()
 
 SERIAL_PORTS = (1, 2)
 
@@ -107,7 +110,7 @@ SERIAL_PORTS = (1, 2)
 #   access through a tunnel.
 for n in SERIAL_PORTS:
     # Set the baud rate of each channel
-    sync.ser_baud(n, 9600)
+    sync.ser_baud(n, 19200)
     # pass
     # And flush anything in there already
     sync.ser_flush(n)
@@ -121,9 +124,9 @@ time.sleep(0.1)
 
 # Read from each channel.  To get something to appear, connect RX <-> TX on
 #    two channels.
-
 for n in SERIAL_PORTS:
     avail = repr(sync.ser_available(n))
     print(f"Serial {n} has {avail} bytes ready to read.")
-    reply = sync.ser_read(n).decode('utf-8')
-    print(f"Serial {n} returned: {reply}")
+    if avail:
+        reply = sync.ser_read(n).decode('utf-8')
+        print(f"Serial {n} returned: {reply}")

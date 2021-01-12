@@ -33,7 +33,7 @@ int CommandQueue::output_float(float x) {
         // We *could* round the fractional part, but this *might* also affect the ipart, so it's too late!
 
         itoa((int)frac, str_buffer, 10);
-        dig = 0;    
+        dig = 0;
         for (dig=0; dig<STR_BUF_LEN; dig++) {
             if (str_buffer[dig] == 0) {break;}
         }
@@ -57,7 +57,7 @@ void CommandQueue::reset() {
 }
 
 void CommandQueue::finish_word() {
-    // for (int i=0; i<4; i++) {led 0 
+    // for (int i=0; i<4; i++) {led 0
     //     str_buffer[i] = (word >> ((3-i)*8)) & (0xFF);
     // }
     // str_buffer[4] = 0;
@@ -119,9 +119,8 @@ void CommandQueue::execute_command() {
                 break;
 
             case LED:
-                for (i=0; i<3; i++) {
-                    ledcWrite(i, (LED_LUT[min(args[i], 255)] * LED_TRIM[i]) >> 16);
-                }
+                startup_colors_active = 0;
+                set_led_color((int)args[0], (int)args[1], (int)args[2]);
                 output_ok();
                 break;
 
@@ -176,7 +175,7 @@ void CommandQueue::execute_command() {
                 } else {
                     Serial1.end();
                     Serial1.begin(args[0], SERIAL_8N1, RX1_PIN, TX1_PIN);
-                    // Due to a hardware and/or software bug, resetting Serial 1 disables the i2c output on pins 16/17
+                    // Due to a hardware and/or software bug, resetting Serial 1 disables the i2s output on pins 16/17
                     // This can be fixed by resetting the pin config for I2S
                     i2s_set_pin(I2S_NUM_0, &pin_config);
                     Serial1.flush();
@@ -212,8 +211,8 @@ void CommandQueue::execute_command() {
                 output_buffer.write("I2S: wrote ");
                 output_int(last_bytes_written);
                 output_buffer.write(" bytes ");
-                output_int(cycles_since_write);
-                output_buffer.write(" cycles ago (");
+                output_int(micros() - last_sync_update);
+                output_buffer.write(" us ago (");
                 output_int(buffer_update_time);
                 output_buffer.write(" us to update buffer)\n");
                 break;
@@ -293,7 +292,7 @@ void CommandQueue::execute_command() {
                     output_error();
                 }
                 break;
-            
+
             case CMD2(SYNC, ADDR):
                 if ((num_args == 2) && (args[0] < SYNC_DATA_SIZE) && (args[1] < SYNC_DATA_SIZE)) {
                     sync_start = args[0];

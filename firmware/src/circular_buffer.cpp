@@ -115,27 +115,38 @@ int CircularBuffer::to_stream(HardwareSerial &stream) {
     return n;
 }
 
+
+#ifdef BLUETOOTH_ENABLED
 int CircularBuffer::to_stream(BluetoothSerial &stream) {
     int n = min(64, available);
+    int written = 0;
+    // Note: the BluetoothSerial object does not have a avaiableForWrite method, and
+    //   so there is no way to tell how much data is in the buffer.
+    // As a workaround, we can see how much was actually written.
 
     if (n) {
         int wrap = (start + n) - SER_BUFFER_SIZE;
         if (wrap > 0) {
             int split = n - wrap;
-            stream.write(buffer + start, split);
-            stream.write(buffer, wrap);
+            written = stream.write(buffer + start, split);
+            if (written == split) {
+                // Only send more data if it got the first bit!
+                written += stream.write(buffer, wrap);
+            }
         } else {
-            stream.write(buffer + start, n);
+            written = stream.write(buffer + start, n);
         }
 
-        start += n;
+        // Only advance as much as was actually written!
+        start += written;
         if (start >= SER_BUFFER_SIZE) {start -= SER_BUFFER_SIZE;}
 
-        available -= n;
+        available -= written;
     }
 
-    return n;
+    return written;
 }
+#endif
 
 int CircularBuffer::to_stream(CircularBuffer &buf) {
     int n = min(SER_BUFFER_SIZE - buf.available, available);

@@ -9,10 +9,6 @@
 #include "nvs.h"
 
 // Define some globally shared variables/arrays
-char ser1_buffer[SER_BUFFER_SIZE+1];
-int ser1_buffer_count = 0;
-char ser2_buffer[SER_BUFFER_SIZE+1];
-int ser2_buffer_count = 0;
 uint16_t LED_LUT[256];
 
 // Set up the serial input/output buffers
@@ -37,11 +33,11 @@ void setup()
         LED_LUT[i] = int(pow((float)i / 256., LED_GAMMA) * 65535.0 + 0.5);
     }
 
-    // Set up LED outputs, and set to off
+    // Set up LED outputs, and set to start of startup sequence
     for (int i=0; i<3; i++) {
         ledcSetup(i, 5000, 16);
         ledcAttachPin(LED_PINS[i], i);
-        ledcWrite(i, 0);
+        ledcWrite(i, LED_STARTUP_SEQ[0][i]);
     }
 
     // Set up OE pin, which enables the shift registers
@@ -140,11 +136,42 @@ CommandQueue serial_commands;
 // If these are added, create a NEW command queue with a corresponding output function as the argument.
 // You will then need to add a new hook in the loop function below to feed characters to the command processing.
 
+int startup_colors_active = 1;
+
 void loop()
 {
     // This loops processes all the command queues, and updates the DMA for the sync
     // Note that update_sync should return quickly if there is nothing to do; it's better
     //  to run it a lot to avoid corrupting the output.
+
+    // Update the LED with pretty colors on boot.
+    if (startup_colors_active) {
+        unsigned long t = millis();
+        int i = t / LED_STARTUP_INTERVAL;
+        if (i >= (LED_STARTUP_LEN-1)) {
+            i = LED_STARTUP_LEN - 1;
+            set_led_color(
+                LED_STARTUP_SEQ[i][0],
+                LED_STARTUP_SEQ[i][1],
+                LED_STARTUP_SEQ[i][2]
+            );
+            startup_colors_active = 0;
+        } else {
+            int r1 = LED_STARTUP_SEQ[i  ][0];
+            int r2 = LED_STARTUP_SEQ[i+1][0];
+            int g1 = LED_STARTUP_SEQ[i  ][1];
+            int g2 = LED_STARTUP_SEQ[i+1][1];
+            int b1 = LED_STARTUP_SEQ[i  ][2];
+            int b2 = LED_STARTUP_SEQ[i+1][2];
+            int m2 = (t * 256) / LED_STARTUP_INTERVAL - i * 256;
+            int m1 = 256 - m2;
+            set_led_color(
+                (m1 * r1 + m2 * r2) >> 8,
+                (m1 * g1 + m2 * g2) >> 8,
+                (m1 * b1 + m2 * b2) >> 8
+            );
+        }
+    }
 
     // Process input commands from USB
     for (int i=Serial.available(); i>0; i--) {
@@ -180,3 +207,9 @@ void loop()
     update_sync();
 }
 
+
+void set_led_color(int r, int g, int b) {
+    ledcWrite(0, (LED_LUT[max(min(r, 255), 0)] * LED_TRIM[0]) >> 16);
+    ledcWrite(1, (LED_LUT[max(min(g, 255), 0)] * LED_TRIM[1]) >> 16);
+    ledcWrite(2, (LED_LUT[max(min(b, 255), 0)] * LED_TRIM[2]) >> 16);
+}

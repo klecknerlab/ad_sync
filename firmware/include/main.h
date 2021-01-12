@@ -59,6 +59,18 @@ const i2s_pin_config_t pin_config = {
 const uint32_t LED_TRIM[3] = {LED_R_TRIM, LED_G_TRIM, LED_B_TRIM};
 const uint8_t LED_PINS[3] = {LED_R_PIN, LED_G_PIN, LED_B_PIN};
 
+// LED outputs a nice sequence of colors on boot, as defined here
+#define LED_STARTUP_LEN 5
+// Interval is in ms
+#define LED_STARTUP_INTERVAL 500 
+const uint8_t LED_STARTUP_SEQ[LED_STARTUP_LEN][3] = {
+    {  0,   0,   0},
+    {255,   0,   0},
+    {255, 255,   0},
+    {255, 255, 255},
+    {  0,   0,   0},
+};
+extern int startup_colors_active;
 
 // The size of various buffers.
 #define SER_BUFFER_SIZE 1024 // Used to buffer all inputs/outputs -- this is in addition to the built in serial buffer, which is 64 bytes.
@@ -70,7 +82,7 @@ const uint8_t LED_PINS[3] = {LED_R_PIN, LED_G_PIN, LED_B_PIN};
 #define min(a,b) (((a)<(b))?(a):(b))
 #define max(a,b) (((a)>(b))?(a):(b))
 
-// Bit depth of I2S output 
+// Bit depth of I2S output
 // Note: if you need to change this, it will require *many* alterations to other parts of the code!
 // (This is just defined for convenience -- don't change it!)
 #define I2S_BIT_DEPTH 24
@@ -78,14 +90,10 @@ const uint8_t LED_PINS[3] = {LED_R_PIN, LED_G_PIN, LED_B_PIN};
 // Globally shared variables and arrays
 // Most of these are output settings which need to be modified by the command queue
 
-// Serial buffers and counts
-// extern char ser1_buffer[SER_BUFFER_SIZE+1];
-// extern int ser1_buffer_count;
-// extern char ser2_buffer[SER_BUFFER_SIZE+1];
-// extern int ser2_buffer_count;
-
 // LED look up table; used for gamma correction
 extern uint16_t LED_LUT[256];
+
+void set_led_color(int r, int g, int b);
 
 // I2S buffer used to write new samples
 // extern uint64_t i2s_write_buffer[I2S_WRITE_BUFFER_SIZE]; // Does not need to be global
@@ -105,7 +113,7 @@ extern int sync_active;
 
 // Used to compute "sync stat" output
 extern uint last_bytes_written, cycles_since_write;
-extern unsigned long buffer_update_time;
+extern unsigned long buffer_update_time, last_sync_update;
 
 // Analog default outputs when not in sync mode
 extern uint16_t ana0_set, ana1_set;
@@ -136,15 +144,16 @@ float sync_freq(float freq);
 esp_err_t bluetooth_set_name(const char* name);
 
 // Circular buffer class
-// This is a non-blocking way of storing serial input/output.  
+// This is a non-blocking way of storing serial input/output.
 // It will fail silently on overlow, but set the overflow variable.
+// Code in "circular_buffer.cpp"
 class CircularBuffer {
     public:
         uint8_t buffer[SER_BUFFER_SIZE];
         uint8_t *b_current, *b_end;
         int start, available, overflow;
 
-        CircularBuffer(); 
+        CircularBuffer();
         int write(const uint8_t *s);
         int write(const char *s);
         int write(const uint8_t *s, int nbytes);

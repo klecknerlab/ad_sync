@@ -5,7 +5,7 @@
 // These are specified as "extern" in "main.h"
 uint last_bytes_written = 0;
 uint cycles_since_write = 0;
-unsigned long buffer_update_time = 0;
+unsigned long buffer_update_time = 0, last_sync_update = 0;
 uint16_t ana0_set = 1<<15, ana1_set = 1<<15;
 int analog_update = 0;
 int analog_sync_mode = 1;
@@ -22,7 +22,7 @@ uint32_t trigger_mask = 0;
 static int sync_end = 1024;
 static unsigned long t1;
 static uint64_t i2s_write_buffer[I2S_WRITE_BUFFER_SIZE];
-static size_t bytes_written = I2S_WRITE_BUFFER_SIZE; // When we've just start up we need to update the output. 
+static size_t bytes_written = I2S_WRITE_BUFFER_SIZE; // When we've just start up we need to update the output.
 static int sync_i = 0;
 static int sync_was_active = 0;
 static int triggered = 0;
@@ -67,7 +67,7 @@ void update_sync() {
         if (sync_active && (!sync_was_active)) {
             sync_i = sync_start;
             sync_end = (sync_start + sync_cycles) % SYNC_DATA_SIZE;
-        } 
+        }
         sync_was_active = sync_active;
 
         for (int i=0; i<I2S_WRITE_BUFFER_SIZE; i++) {
@@ -79,7 +79,7 @@ void update_sync() {
                 if (analog_sync_mode == 0) { // Fixed output mode
                     // We need to write something, so just update analog 0
                     ad = (DAC_SPI_CH0 + ana0_set);
-                } else { 
+                } else {
                     int channel = 0;
 
                     // If we're in dual output mode, channel is chosen by address
@@ -96,14 +96,14 @@ void update_sync() {
 
                 uint32_t dd = (data & 0xFFFF0000) >> 16;
 
-                // If triggered, all channels output.  
+                // If triggered, all channels output.
                 // If not, we need to zero the triggered channels
                 if (!triggered) {
                     dd &= ~trigger_mask;
                 }
 
                 // OR output mode
-                if (digital_sync_mode == 1) { 
+                if (digital_sync_mode == 1) {
                     dd |= (data & 0xFF00) >> 8;
                 }
 
@@ -139,7 +139,8 @@ void update_sync() {
         // Collect some stats about the update.
         cycles_since_write = 0;
         last_bytes_written = bytes_written;
-        buffer_update_time = micros() - t1;
+        last_sync_update = micros();
+        buffer_update_time = last_sync_update - t1;
     } else {
         cycles_since_write++;
     }
@@ -181,7 +182,7 @@ float sync_freq(float freq) {
         Serial.print("\nsdm1: ");
         Serial.print(sdm1);
         Serial.print("\nsdm0: ");
-        Serial.print(sdm0);        
+        Serial.print(sdm0);
         Serial.print("\nodiv: ");
         Serial.print(odiv);
         Serial.print("\nN: ");
@@ -202,7 +203,7 @@ float sync_freq(float freq) {
     //   bits=24 -> I2S_[TX/RX]_BITS_MOD -> [23:18], [17:12]
     //   M -> I2S_[TX/RX]_BCK_DIV_NUM[5:0] -> [11:6], [5:0]
     WRITE_PERI_REG(I2S_SAMPLE_RATE_CONF_REG(0), (I2S_BIT_DEPTH<<18) + (I2S_BIT_DEPTH<<12) + (M<<6) + M);
-    
+
     // I2S_CLKM_CONF_REG
     //   1 -> I2S_CLKA_ENA -> [21]
     //   N -> REG_CLKM_DIV_NUM[7:0] -> [7:0]
@@ -212,4 +213,3 @@ float sync_freq(float freq) {
 
     return actual_clk / 48;
 }
-
