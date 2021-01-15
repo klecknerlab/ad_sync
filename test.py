@@ -21,7 +21,7 @@ Example: "python test.py COM3" """
 port = sys.argv[1]
 
 NUM_SAMPLES = 256
-OUTPUT_FREQ = 1000
+OUTPUT_FREQ = 2000
 
 # Start address for data output
 # In practice, you'd probably start at 0, but as an example...
@@ -73,7 +73,7 @@ sync.analog_scale(0, 2, 1)
 # Set the other analog output 1 to +3 V
 sync.analog_set(1, 3)
 
-# Set the output rate -- in this case we want to signal to run at 100 Hz, so
+# Set the output rate -- in this case we want to signal to run at 2 kHz, so
 #   the output rate = NUM_SAMPLES * OUTPUT_FREQ
 # The rate won't be exact; but it should be within a few PPM
 print(sync.rate(NUM_SAMPLES * OUTPUT_FREQ))
@@ -100,18 +100,17 @@ sync.led(0, 0, 0)
 # Print some stats
 print(sync.stat())
 
-sys.exit()
+# sys.exit()
 
 SERIAL_PORTS = (1, 2)
 
 # Lets try reading/writing from the attached serial ports
 # Note: unlike other outputs, the tunneled serial ports are numbered 1 and 2
 # There *is* a ser0, but this is the main USB communications, which you can't
-#   access through a tunnel.
+#   access through a tunnel.  (It is the tunnel!)
 for n in SERIAL_PORTS:
     # Set the baud rate of each channel
     sync.ser_baud(n, 19200)
-    # pass
     # And flush anything in there already
     sync.ser_flush(n)
 

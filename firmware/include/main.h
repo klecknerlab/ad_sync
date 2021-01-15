@@ -7,7 +7,7 @@
 #include "driver/i2s.h"
 
 // Is Bluetooth enabled at all?
-#define BLUETOOTH_ENABLED 1
+// #define BLUETOOTH_ENABLED 1
 
 #ifdef BLUETOOTH_ENABLED
     #include "BluetoothSerial.h"
@@ -35,11 +35,11 @@
 #define TX2_PIN         33
 #define I2S_CLK_PIN     16
 #define I2S_WS_PIN      17
-#define I2S_SD_PIN      4
+#define I2S_SD_PIN      15
 #define OE_PIN          13
-#define LED_R_PIN       21
+#define LED_R_PIN       18
 #define LED_G_PIN       19
-#define LED_B_PIN       18
+#define LED_B_PIN       21
 
 const i2s_pin_config_t pin_config = {
     .bck_io_num = I2S_CLK_PIN,
@@ -53,21 +53,25 @@ const i2s_pin_config_t pin_config = {
 
 // The trim is used to scale each output so that max brightness = white
 // Output duty cycle is proportional to trim; 65536 is maximum!
-#define LED_R_TRIM      65536
+// Testing found that with no trim, led 200 255 120 gave white
+// R_TRIM = (200/255)^2.2 * 65536
+#define LED_R_TRIM      38402 
+// R_TRIM = (255/255)^2.2 * 65536
 #define LED_G_TRIM      65536
-#define LED_B_TRIM      65536
+// R_TRIM = (200/255)^2.2 * 65536
+#define LED_B_TRIM      12482
 const uint32_t LED_TRIM[3] = {LED_R_TRIM, LED_G_TRIM, LED_B_TRIM};
 const uint8_t LED_PINS[3] = {LED_R_PIN, LED_G_PIN, LED_B_PIN};
 
 // LED outputs a nice sequence of colors on boot, as defined here
 #define LED_STARTUP_LEN 5
 // Interval is in ms
-#define LED_STARTUP_INTERVAL 500 
+#define LED_STARTUP_INTERVAL 750 
 const uint8_t LED_STARTUP_SEQ[LED_STARTUP_LEN][3] = {
     {  0,   0,   0},
-    {255,   0,   0},
-    {255, 255,   0},
-    {255, 255, 255},
+    {  0,   0, 255},
+    {  0, 255, 255},
+    {225, 255, 255},
     {  0,   0,   0},
 };
 extern int startup_colors_active;

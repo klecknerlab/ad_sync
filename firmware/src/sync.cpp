@@ -59,6 +59,8 @@ void init_sync() {
     Serial.println(xPortGetCoreID());
 }
 
+static int dac_setup_complete = 0;
+
 void update_sync() {
     // Only update the buffer if we need to
     if (bytes_written) { // The buffer was written, so prepare a new one!
@@ -135,6 +137,14 @@ void update_sync() {
             i2s_write_buffer[1] = (i2s_write_buffer[1] & I2S_DIG_MASK) + ((DAC_SPI_CH1 + ana1_set) << DAC_SHIFT);
         }
         analog_update = 0;
+
+        if ((!dac_setup_complete) && (t1 > DAC_SETUP_DELAY_US)) {
+            i2s_write_buffer[0] = (i2s_write_buffer[0] & I2S_DIG_MASK) + (DAC_SETUP_A << DAC_SHIFT);
+            i2s_write_buffer[1] = (i2s_write_buffer[1] & I2S_DIG_MASK) + (DAC_SETUP_B << DAC_SHIFT);
+            i2s_write_buffer[2] = (i2s_write_buffer[2] & I2S_DIG_MASK) + (DAC_SETUP_C << DAC_SHIFT);
+            i2s_write_buffer[3] = (i2s_write_buffer[3] & I2S_DIG_MASK) + (DAC_SETUP_D << DAC_SHIFT);
+            dac_setup_complete = 1;
+        }
 
         // Collect some stats about the update.
         cycles_since_write = 0;

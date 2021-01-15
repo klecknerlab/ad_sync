@@ -7,12 +7,53 @@
 
 // Constants used only by sync.cpp
 
-// These are the SPI header bits used for the MCP4822
-// Note: the data is always 16 bits, so we are shifting to the left of that.
-#define DAC_SPI_CH0 (0b0011 << 16)
-#define DAC_SPI_CH1 (0b1011 << 16)
-// Bit shift required to align the data.  The buffer is 32 bits, and the data+header is 20 bits
-#define DAC_SHIFT 12
+// The following blocks depend on the DAC on the device.
+// The production version uses DAC8562
+// The prototype used MCP4822 (becuase I had one lying around!)
+
+#define DAC8562 1
+#ifdef DAC8562
+    // These are the SPI header bits used for the MCP4822
+    // Note: the data is always 16 bits, so we are shifting to the left of that.
+    #define DAC_SPI_CH0 (0b011000 << 16)
+    #define DAC_SPI_CH1 (0b011001 << 16)
+
+    // These codes are run (in order) after the device is fully booted.
+    
+    // Internal reference, gain = 2
+    #define DAC_SETUP_A 0b001110000000000000000001
+    //                    XXCCCAAAddddddddDDDDDDDD
+    // Set both DAC to gain = 1
+    #define DAC_SETUP_B 0b000000100000000000000011
+    //                    XXCCCAAAddddddddDDDDDDDD
+    // Disable both LDAC pins
+    #define DAC_SETUP_C 0b001100000000000000000011
+    //                    XXCCCAAAddddddddDDDDDDDD
+    // Power up both DACs
+    #define DAC_SETUP_D 0b001000000000000000000011
+    //                    XXCCCAAAddddddddDDDDDDDD
+
+    // Bit shift required to align the data.  The buffer is 32 bits, and the data+header is 24 bits
+    #define DAC_SHIFT 8
+
+    // Delay in us after boot to try running the setup commands.
+    #define DAC_SETUP_DELAY_US 100000
+#endif
+
+// #define MCP4822 1
+#ifdef MCP4822
+    // These are the SPI header bits used for the MCP4822
+    // Note: the data is always 16 bits, so we are shifting to the left of that.
+    #define DAC_SPI_CH0 (0b0011 << 16)
+    #define DAC_SPI_CH1 (0b1011 << 16)
+    #define DAC_SETUP_A 0
+    #define DAC_SETUP_B 0
+    #define DAC_SETUP_C 0
+    #define DAC_SETUP_D 0
+    // Bit shift required to align the data.  The buffer is 32 bits, and the data+header is 20 bits
+    #define DAC_SHIFT 12
+    #define DAC_SETUP_DELAY_US 0
+#endif
 
 // Output masks for analog and digital data
 #define I2S_DIG_MASK (0xFFFFFFFF00000000)

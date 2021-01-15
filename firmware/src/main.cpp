@@ -37,7 +37,7 @@ void setup()
     for (int i=0; i<3; i++) {
         ledcSetup(i, 5000, 16);
         ledcAttachPin(LED_PINS[i], i);
-        ledcWrite(i, LED_STARTUP_SEQ[0][i]);
+        ledcWrite(i, (i==0) ? 255 : 0);
     }
 
     // Set up OE pin, which enables the shift registers

@@ -1,0 +1,52 @@
+EESchema-LIBRARY Version 2.4
+#encoding utf-8
+#
+# Texas Instruments DAC8562SDGSR
+#
+DEF DAC8562SDGSR U 0 40 Y Y 1 L N
+F0 "U" 0 200 50 H V L CNN 
+F1 "DAC8562SDGSR" 0 300 50 H V L CNN 
+F2 "Texas_Instruments-DAC8562SDGSR-*" 0 400 50 H I L CNN 
+F3 "http://www.ti.com/general/docs/lit/getliterature.tsp?genericPartNumber=DAC8562&fileType=pdf" 0 500 50 H I L CNN 
+F4 "MO-153" 0 600 50 H I L CNN "Code  JEDEC"
+F5 "Manufacturer URL" 0 700 50 H I L CNN "Component Link 1 Description"
+F6 "http://www.ti.com/" 0 800 50 H I L CNN "Component Link 1 URL"
+F7 "Package Specification" 0 900 50 H I L CNN "Component Link 3 Description"
+F8 "http://www.ti.com/lit/ml/mpds035b/mpds035b.pdf" 0 1000 50 H I L CNN "Component Link 3 URL"
+F9 "2" 0 1100 50 H I L CNN "DAC Channels"
+F10 "1" 0 1200 50 H I L CNN "DNL Max  LSB"
+F11 "SLAS719D" 0 1300 50 H I L CNN "Datasheet Version"
+F12 "12" 0 1400 50 H I L CNN "INL Max  LSB"
+F13 "Serial SPI" 0 1500 50 H I L CNN "Interface"
+F14 "Surface Mount" 0 1600 50 H I L CNN "Mounting Technology"
+F15 "10-Pin Plastic Small Outline, Body 3 x 3 mm, Pitch 0.5 mm" 0 1700 50 H I L CNN "Package Description"
+F16 "4073272/C, 02/2004" 0 1800 50 H I L CNN "Package Version"
+F17 "0.9" 0 1900 50 H I L CNN "Power ConsumptionTypmW"
+F18 "16" 0 2000 50 H I L CNN "Resolution Bits"
+F19 "7" 0 2100 50 H I L CNN "Settling Timeus"
+F20 "Precision DAC (=<10MSPS)" 0 2200 50 H I L CNN "Sub Family"
+F21 "IC" 0 2300 50 H I L CNN "category"
+F22 "1089224" 0 2400 50 H I L CNN "ciiva ids"
+F23 "61782467c7e71856" 0 2500 50 H I L CNN "library id"
+F24 "Texas Instruments" 0 2600 50 H I L CNN "manufacturer"
+F25 "DGS10" 0 2700 50 H I L CNN "package"
+F26 "1386925344" 0 2800 50 H I L CNN "release date"
+F27 "Yes" 0 2900 50 H I L CNN "rohs"
+F28 "4A0CFE85-A989-48AD-B5A5-99A392C7EDA5" 0 3000 50 H I L CNN "vault revision"
+F29 "yes" 0 3100 50 H I L CNN "imported"
+DRAW
+X VOUTA 1 1500 0 100 L 40 40 1 1 O 
+X VOUTB 2 1500 -200 100 L 40 40 1 1 O 
+X GND 3 1500 -700 100 L 40 40 1 1 W 
+X ~LDAC~ 4 100 -500 100 R 40 40 1 1 I 
+X ~CLR~ 5 100 -400 100 R 40 40 1 1 I 
+X ~SYNC~ 6 100 -200 100 R 40 40 1 1 I 
+X SCLK 7 100 0 100 R 40 40 1 1 I C
+X DIN 8 100 -100 100 R 40 40 1 1 I 
+X AVDD 9 100 -700 100 R 40 40 1 1 W 
+X VREFIN/VREFOUT 10 1500 -400 100 L 40 40 1 1 B 
+S 200 100 1400 -800 1 1 0 f
+ENDDRAW
+ENDDEF
+#
+# End Library

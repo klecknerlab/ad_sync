@@ -1,6 +1,8 @@
 This directory contains the files for fabricating the physical board.
-The original version (V1) was fabricated using [JLCPCB](https://jlcpcb.com/), which provides a low cost PCB assembly service.
+The original version (V1, V1 rev. 2) was fabricated using [JLCPCB](https://jlcpcb.com/), which provides a low cost PCB assembly service.
 (5 boards + components ~ $120.)
+**If you are going to have these fabricated, you should use the rev. 2 version, which fixes a problem with one of the chip connections!**
+
 All files needed to fabricate the board are in this directory, note that there are two versions of the component placement file -- the one ending in `pos-fixed.csv` has the rotations fixed to JLCPCB's specifications, and this is the file you should use for this board manufacturer.  The similarly named file without the `-fixed` is the raw part placement output from KiCad.
 
 In addition to the surface mount components (which can be installed by JLCPCB), there are a number of through hole components which need to be manually attached.
@@ -25,5 +27,9 @@ Also not listed are headers for connecting to the peripherial outputs near the c
 **Misc. Optional:**
 * Power jack -- only needed if you aren't powering through USB (1 per board: [Wurth 	
 694106301002](https://www.digikey.com/en/products/detail/w%C3%BCrth-elektronik/694106301002/5047522))
-* Filter capacitors: the analog output amplifiers have empty slots for a through hole capacitor.  The amplifier resistor is 120 kOhm, so 100 pF gives a -3dB frequency of 13.3 KHz.  This is easily achieved with a small ceramic capacitor.  The filter capacitor for the main signal is CFxP1.  The second capacitor for each output (CFxM1) is the filter on the voltage reference, which is used to make the output bipolar.  This shouldn't be needed, but could (maybe?) reduce noise if added.
+* Filter capacitors: the analog output amplifiers have empty slots for a through hole capacitor.  
+The amplifier resistor is 120 kOhm, so 100 pF gives a -3dB frequency of 13.3 KHz.  
+There is already 30 pF attached to the output (CF3/CF13) giving a 44 kHz cutoff; if higher speeds are required you could remove these resistors, but this is not recommended.
+If you would like to provide additional filtering, a capacitor could be attachd to CF2/CF12.
+
 * Output resistors: the digital outputs come with a surface mount 50 Ohm resistor installed.  If you would like a different output resistance, you can remove this resistor and add a through hole resistor next to the BNC output.  In most cases this should not be needed.
