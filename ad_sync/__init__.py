@@ -10,6 +10,7 @@ class ADSyncError(Exception):
 class ADSync:
     ANALOG_RANGE = 20
     ANALOG_MAX = 65536
+    FREQ_MAX = 700000
 
     def __init__(self, port, baud=115200, timeout=0.5, debug=False):
         """

@@ -46,6 +46,8 @@ All of the functions are illustrated in `test.py`, located in this directory.
 
 All of the functions in the communication protocol (described below), also have a corresponding python method with a similar or identical name.
 
+On some OS's you may need to install drivers for the USB chip on the board ([Sillabs CP2104](https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers).)
+
 ## Description of Synchronized Outputs
 The synchronized outputs are fed from an internal memory of up to 16384 samples.
 Each sample is a 32 bit unsigned integer.
