@@ -11,6 +11,7 @@ class ADSync:
     ANALOG_RANGE = 20
     ANALOG_MAX = 65536
     FREQ_MAX = 700000
+    MAX_ADDR = 16384
 
     def __init__(self, port, baud=115200, timeout=0.5, debug=False):
         """
@@ -24,7 +25,7 @@ class ADSync:
         Keywords
         --------
         baud : int (default: 115200)
-        timeout : float (default: 0.1)
+        timeout : float (default: 0.5)
         debug : bool (default: False)
             If true, prints out all serial communcation with the device.
         """
@@ -34,6 +35,7 @@ class ADSync:
         self.ser.rts = False
         self.ser.dtr = False
         self.ser.open()
+        self.byte_rate = baud / 10
 
     def reset(self):
         """
@@ -230,7 +232,7 @@ class ADSync:
         self._cmd(b"SYNC STOP")
         return self._reply()
 
-    def write(self, addr, data):
+    def write(self, addr, data, wait=True):
         """
         Write data to the sync memory.
 
@@ -240,11 +242,18 @@ class ADSync:
             The address to write to (0-16383)
         data : numpy array
             The data to write; should be a uint32 array.
+
+        Keywords
+        --------
+        wait : bool (default: true)
+            If True, wait for the write to finish before returning.
         """
         self._cmd("SYNC WRITE", addr, data)
+        if wait:
+            time.sleep((len(data) * 4 / self.byte_rate))
         return self._reply()
 
-    def write_ad(self, addr, dig, ana, scale=1):
+    def write_ad(self, addr, dig, ana, scale=1, wait=True):
         """
         Combine analog and digital data into single data stream and write those
         to the sync memory.
@@ -264,6 +273,8 @@ class ADSync:
             The scale of the analog data -- plus or minus this value gets
             mapped to the full range.  (I.e. for the default, -1 -> 0 and
             +1 -> 65535.)
+        wait : bool (default: true)
+            If True, wait for the write to finish before returning.
         """
         if len(dig) != len(ana):
             raise ValueError("digital and analog data should have same length")
@@ -272,7 +283,7 @@ class ADSync:
         data += (np.clip(ana * (0.5/scale) + 0.5, 0, 1)
                  * (self.ANALOG_MAX-1)).astype('uint32')
 
-        return self.write(addr, data)
+        return self.write(addr, data, wait=wait)
 
     def rate(self, rate):
         """
@@ -481,3 +492,98 @@ class ADSync:
 
     def __del__(self):
         self.close()
+
+
+class SmoothRamp:
+    def __init__(self, t0=0, ts=1, tr=0.5, tj=None, rate=None):
+        '''Create a smooth ramp function.
+
+        Keywords
+        --------
+        t0 : float (default: 0)
+            The time between the start of the linear ramp and the active region
+        ts : float (default: 1)
+            The time of the linear scan region, not including t0
+        tr : float (default: 0.5)
+            The time to return to the start of the scan
+        tj : float (default: tr / 8)
+            The jerk timescale, which sets the timescale over which the
+            acceleration ramps up.  Should be at most tr / 4
+        rate : float (default: 2.0 / ts)
+            The scan ramp rate.  Default scans between -1 and 1 over ts
+
+        After creating a ramp function, you can call it like a function, where
+        the input is the times at which to compute the ramp.  Optionally, you
+        can specify a keyword `d=[0-3]` in the function call, which outputs a
+        derivative of the ramp function.
+        '''
+        if tj is None:
+            self.tj = tr / 8
+        else:
+            self.tj = tj
+        if rate is None:
+            rate = 2.0 / ts
+
+        self.t0 = t0 # Time from end of acceleration to beginning of active scan
+        self.ts = ts # Active scan time
+        self.tl = t0 + ts # Linear ramp time
+        self.ta = 0.5 * (tr - 4 * self.tj) # Full acceleration time
+        self.tr = tr # Return time
+
+        self.x0 = -rate * (t0 + 0.5*ts)
+        self.v0 = rate
+        self.amax = 4 * (self.tl + self.tr) * self.v0 / (self.tr * (self.tr - 2 * self.tj))
+        self.jerk = self.amax / self.tj
+
+        # Motion profiles for each stage: (dt, x0, v0, a0, j)
+        self.profile = []
+
+        x = self.x0
+        v = self.v0
+        a = 0
+
+        # The profiles are determined only by the time and the (constant) jerk
+        for i, (dt, j) in enumerate([
+                    (self.tl, 0),
+                    (self.tj, -self.jerk),
+                    (self.ta, 0),
+                    (2*self.tj, self.jerk),
+                    (self.ta, 0),
+                    (self.tj, -self.jerk)
+                ]):
+            self.profile.append((dt, x, v, a, j))
+            x += v*dt + (a/2)*dt**2 + (j/6)*dt**3
+            v += a*dt + (j/2)*dt**2
+            a += j*dt
+
+        self.T = self.tl + self.tr
+
+    def __call__(self, t, d=0):
+        dt = (np.asarray(t) % self.T)
+        sort = np.argsort(dt)
+        unsort = np.argsort(sort)
+        t = dt[sort]
+        x = np.zeros_like(dt)
+        i0 = 0
+
+        for (dt, x0, v, a, j) in self.profile:
+            try:
+                i1 = np.where(t > dt)[0][0]
+            except:
+                i1 = len(t)
+            tt = t[i0:i1]
+            if d == 0:
+                x[i0:i1] = x0 + v*tt + (a/2)*tt**2 + (j/6) * tt**3
+            elif d == 1:
+                x[i0:i1] = v + a*tt + (j/2)*tt**2
+            elif d == 2:
+                x[i0:i1] = a + j*tt
+            elif d == 3:
+                x[i0:i1] = j
+            else:
+                raise ValueError('derivative (d) should be 0--3')
+
+            t -= dt
+            i0 = i1
+
+        return np.array(x[unsort])
