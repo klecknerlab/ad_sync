@@ -266,6 +266,12 @@ class ScanControls(ConfigTab):
             tip='Delay from the start of the ramp to start capturing frames; used to ensure the galvo has settled into a linear ramp.'
         )
 
+        self.galvo_delay = self.add_control(
+            'Galvo Delay Compensation (ms):', 0.1, min=0, max=1, step=0.1, decimals=2,
+            update=self.update_control_display, name='galvo_delay',
+            tip='Delay applied to the galvo signal, to compensate for response.  (Analog output is shifted by this much earlier in time.)'
+        )
+
         self.fpv = self.add_control(
             'Frames per Volume:', 512, min=0, max=2048, step=128, decimals=None,
             update=self.update_control_display, name='frames_per_volume',
@@ -406,7 +412,7 @@ class ScanControls(ConfigTab):
 
         dig[laser_pulses] += 1 << 1 # Channel 1 is the laser
 
-        t_a = (np.arange(samples) - 0.5) / sample_rate
+        t_a = (np.arange(samples) - 0.5) / sample_rate + self.galvo_delay.value() * 1E-3
         t_d = np.arange(samples) / sample_rate
 
         analog = SmoothRamp(t0=ft0, ts=fpv, tr=ftr)(t_a * frame_rate)
