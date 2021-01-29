@@ -31,7 +31,8 @@ If you would like to fabricate, modify, or just use these boards, get in touch!
 * [ ] Wifi connection
 * [x] Bluetooth connection
 * [x] Aux. serial port connections
-* [ ] Experimental testing and validation
+* [x] Experimental testing and validation
+* [x] Synchronizer GUI
 
 ## Contents
 This project contains four directories:
@@ -106,6 +107,9 @@ Parameters are specified in square brackets, and correspond to unsigned integers
 	- Digital mode options:
 		- `0`: All 16 outputs derived from sync data (default)
 		- `1`: "Or" mode.  Channels 0-7 are logical "or"ed with channels 8-15.  8-15 have the normal output.  (Can be used to superimpose triggered and non-triggered signals.)
+        - `2`: "Swap" mode.  Channels 0-7 swapped with 8-15.  (Can be used to switch the
+            outputs w/o a reupload.)
+        - `3': "Swap-Or" mode.  Apply the swap and then the or operation.
 * `SYNC ADDR [addr] [count]⏎`: Change the start address and number of data points for a period of the sync output.
 * `SYNC ADDR⏎`: Returns the current sync mode (`SYNC CYCLE [addr] [count]⏎`)
 * `SYNC RATE [rate Hz] [rate mHz (optional)]⏎`:

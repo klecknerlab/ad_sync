@@ -13,7 +13,7 @@ class ADSync:
     FREQ_MAX = 700000
     MAX_ADDR = 16384
 
-    def __init__(self, port, baud=115200, timeout=0.5, debug=False):
+    def __init__(self, port, baud=921600, timeout=0.5, debug=False):
         """
         Initialize a AD sync device.
 
@@ -215,14 +215,17 @@ class ADSync:
             1: Analog 0 streams from sync data, analog 1 fixed value
             2: Analog 1 streams from sync data, analog 0 fixed value
             3: Both channels stream, alternating updates. Even sync data
-            addresses go to analog 0, odd address to analog 1. Note that this
-            halves the update rate of each analog channel, relative to the
-            digital signals.
+                addresses go to analog 0, odd address to analog 1. Note that
+                this halves the update rate of each analog channel, relative to
+                the digital signals.
         digital_mode : int (default: 0)
             0: All 16 outputs derived from sync data
             1: "Or" mode. Channels 0-7 are logical "or"ed with channels 8-15.
-            8-15 have the normal output. (Can be used to superimpose triggered
-            and non-triggered signals.)
+                8-15 have the normal output. (Can be used to superimpose
+                triggered and non-triggered signals.)
+            2: "Swap" mode. Swaps channels 0-7 with 8-15. (Can be used to
+                switch the digital signals without re-uploading.)
+            3: "Swap-Or" mode.  Apply the swap and then the or operation.
         """
         self._cmd("SYNC MODE", analog_mode, digital_mode)
         return self._reply()

@@ -45,7 +45,7 @@ void setup()
     digitalWrite(OE_PIN, LOW); // Shift registers enabled
 
     // Set up serial ports
-    Serial.begin(115200); // 0 is used for USB communication with host
+    Serial.begin(921600); // 0 is used for USB communication with host
     Serial1.begin(9600, SERIAL_8N1, RX1_PIN, TX1_PIN); // Ser1
     Serial2.begin(9600, SERIAL_8N1, RX2_PIN, TX2_PIN); // Ser2
     Serial.flush();

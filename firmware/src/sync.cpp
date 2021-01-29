@@ -104,10 +104,17 @@ void update_sync() {
                     dd &= ~trigger_mask;
                 }
 
+                // Swap mode
+                if (digital_sync_mode & 0b10) {
+                    dd = ((dd & 0xFF00) >> 8) + ((dd & 0x00FF) << 8);
+                }
+
                 // OR output mode
-                if (digital_sync_mode == 1) {
+                if (digital_sync_mode & 0b01) {
                     dd |= (data & 0xFF00) >> 8;
                 }
+
+                
 
                 // Bits 8-31 are analog output -- shift determined by global constant (DAC dependent)
                 // Bits 40-63 are digital output.

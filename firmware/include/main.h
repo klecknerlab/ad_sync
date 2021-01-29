@@ -53,13 +53,13 @@ const i2s_pin_config_t pin_config = {
 
 // The trim is used to scale each output so that max brightness = white
 // Output duty cycle is proportional to trim; 65536 is maximum!
-// Testing found that with no trim, led 200 255 120 gave white
-// R_TRIM = (200/255)^2.2 * 65536
-#define LED_R_TRIM      38402 
+// Testing found that with no trim, led 225 255 180 gave white
 // R_TRIM = (255/255)^2.2 * 65536
+#define LED_R_TRIM      65536
+// G_TRIM = (255/255)^2.2 * 65536
 #define LED_G_TRIM      65536
-// R_TRIM = (200/255)^2.2 * 65536
-#define LED_B_TRIM      12482
+// B_TRIM = (180/255)^2.2 * 65536
+#define LED_B_TRIM      30457
 const uint32_t LED_TRIM[3] = {LED_R_TRIM, LED_G_TRIM, LED_B_TRIM};
 const uint8_t LED_PINS[3] = {LED_R_PIN, LED_G_PIN, LED_B_PIN};
 

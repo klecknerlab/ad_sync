@@ -231,6 +231,18 @@ class MainControls(ConfigTab):
             tip='The voltage at the center of the active section of the scan profile.'
         )
 
+        self.align_mode = self.add_checkbox(
+            'Alignment Mode:', False,
+            update=self.update_align, name='alignment_mode',
+            tip='If checked, output laser pulses in alignment mode (a pulse at the start, middle, and end of the active scan only)'
+        )
+
+        self.output_active = self.add_checkbox(
+            'Outputs Active:', False,
+            update=self.update_active, name='output_active',
+            tip='If checked, outputs are active, otherwise they are not.'
+        )
+
         self.vps = self.add_display(
             'Volume Rate:',
             tip='The number of volumes captured per second.'
@@ -252,6 +264,14 @@ class MainControls(ConfigTab):
     def update_scale(self):
         if hasattr(self.parent, "scan_controls"):
             self.parent.scan_controls.update_scale()
+
+    def update_align(self):
+        if hasattr(self.parent, "scan_controls"):
+            self.parent.scan_controls.update_align()
+
+    def update_active(self):
+        if hasattr(self.parent, "scan_controls"):
+            self.parent.scan_controls.update_active()
 
 
 class ScanControls(ConfigTab):
@@ -309,12 +329,6 @@ class ScanControls(ConfigTab):
             'Flip Scan Direction:', False,
             update=self.update_control_display, name='scan_flipped',
             tip='If checked, flip the direction of the scan.'
-        )
-
-        self.align_mode = self.add_checkbox(
-            'Alignment Mode:', False,
-            update=self.update_control_display, name='alignment_mode',
-            tip='If checked, output laser pulses in alignment mode (a pulse at the start, middle, and end of the active scan only)'
         )
 
         self.upload_button = self.add_button(
@@ -396,6 +410,7 @@ class ScanControls(ConfigTab):
                     self.current_port = port
                     self.parent.statusBar().showMessage(f"Connected to sync board at {port}.")
                     self.update_scale()
+                    self.update_align()
                 else:
                     self.parent.statusBar().showMessage(f"ERROR: no sync board at {port}!")
                     self.sync.close()
@@ -436,16 +451,17 @@ class ScanControls(ConfigTab):
 
         camera_pulses = (ft0 + np.arange(fpv)) * oversample
         dig[camera_pulses] += 1 << 0 # Channel 0 is camera
+        dig[camera_pulses] += 1 << 8 # Channel 8 is camera in align mode
 
-        if self.align_mode.isChecked():
-            i0 = ft0 * oversample # sample # of first laser pulse in scan
-            i1 = (ft0+fpv) * oversample # sample # of last laser pulse in scan
-            im = (i0 + i1) // 2 # Mid point; may not align with frame, but thats ok
-            laser_pulses = np.array([i0, im, i1], dtype='i')
-        else:
-            laser_pulses = np.arange(total_frames) * oversample
-
+        laser_pulses = np.arange(total_frames) * oversample
         dig[laser_pulses] += 1 << 1 # Channel 1 is the laser
+
+        i0 = ft0 * oversample # sample # of first laser pulse in scan
+        i1 = (ft0 + fpv - 1) * oversample # sample # of last laser pulse in scan
+        im = (i0 + i1) // 2 # Mid point; may not align with frame, but thats ok
+        align_pulses = np.array([i0, im, i1], dtype='i')
+
+        dig[align_pulses] += 1 << 9 # Channel 1 in swap mode = laser
 
         t_a = (np.arange(samples) - 0.5) / sample_rate + self.galvo_delay.value() * 1E-3
         t_d = np.arange(samples) / sample_rate
@@ -454,13 +470,16 @@ class ScanControls(ConfigTab):
         self.analog_scale = abs(analog).max()
         analog /= self.analog_scale
 
-        dig[0] += 1 << 7
+        dig[ft0 * oversample] += 1 << 3 # Volume start signal
+        dig[ft0 * oversample] += 1 << 11 # Volume start signal in alignment mode
+
 
         if self.flipped.isChecked():
             analog *= -1
 
         try:
             self.sync.stop()
+            self.sync.led(255, 0, 255)
             self.sync.rate(sample_rate)
             response = self.sync.write_ad(0, dig, analog)
 
@@ -468,7 +487,7 @@ class ScanControls(ConfigTab):
 
             self.sync.addr(0, samples)
             self.update_scale()
-            self.sync.start()
+            self.update_active()
 
             if m and int(m.group(1)) == samples:
                 self.upload_button.setEnabled(False)
@@ -491,6 +510,25 @@ class ScanControls(ConfigTab):
             offset = self.parent.main_controls.scan_offset.value()
             self.sync.analog_scale(0, scale, offset)
 
+    def update_align(self):
+        if self.sync is not None:
+            self.sync.mode(1, 2 if self.parent.main_controls.align_mode.isChecked() else 0)
+        self.update_active() # Updates the LED colors
+
+    def update_active(self):
+        if self.sync is not None:
+            if self.parent.main_controls.output_active.isChecked():
+                if self.parent.main_controls.align_mode.isChecked():
+                    self.sync.led(0, 0, 255)
+                else:
+                    self.sync.led(0, 255, 0)
+
+                self.sync.start()
+            else:
+                self.sync.led(0, 0, 0)
+                self.sync.stop()
+
+            self.sync.mode(1, 2 if self.parent.main_controls.align_mode.isChecked() else 0)
 
     def update_control_display(self):
         if not self.active:

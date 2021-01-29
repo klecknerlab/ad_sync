@@ -285,7 +285,7 @@ void CommandQueue::execute_command() {
                 } else if (args[0] < 4) {
                     analog_sync_mode = args[0];
                     analog_update |= (~analog_sync_mode) & 0b11;
-                    digital_sync_mode = ((num_args == 1) || args[1]) ? 1 : 0;
+                    digital_sync_mode = args[1];
                     output_ok();
                 } else {
                     error = ERR_INVALID_ARG;
