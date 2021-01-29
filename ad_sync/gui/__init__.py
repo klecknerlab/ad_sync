@@ -243,6 +243,12 @@ class MainControls(ConfigTab):
             tip='If checked, outputs are active, otherwise they are not.'
         )
 
+        self.led_active = self.add_checkbox(
+            'LED indicator active:', True,
+            update=self.update_active, name='led_active',
+            tip='If checked, led indicator is active, otherwise it is always off.'
+        )
+
         self.vps = self.add_display(
             'Volume Rate:',
             tip='The number of volumes captured per second.'
@@ -518,10 +524,13 @@ class ScanControls(ConfigTab):
     def update_active(self):
         if self.sync is not None:
             if self.parent.main_controls.output_active.isChecked():
-                if self.parent.main_controls.align_mode.isChecked():
-                    self.sync.led(0, 0, 255)
+                if self.parent.main_controls.led_active.isChecked():
+                    if self.parent.main_controls.align_mode.isChecked():
+                        self.sync.led(0, 0, 255)
+                    else:
+                        self.sync.led(0, 255, 0)
                 else:
-                    self.sync.led(0, 255, 0)
+                    self.sync.led(0, 0, 0)
 
                 self.sync.start()
             else:

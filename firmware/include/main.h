@@ -7,7 +7,7 @@
 #include "driver/i2s.h"
 
 // Is Bluetooth enabled at all?
-// #define BLUETOOTH_ENABLED 1
+#define BLUETOOTH_ENABLED 1
 
 #ifdef BLUETOOTH_ENABLED
     #include "BluetoothSerial.h"
