@@ -2,7 +2,8 @@ import numpy as np
 from PyQt5 import QtCore
 from PyQt5.QtWidgets import (QApplication, QCheckBox, QComboBox, QGridLayout,
         QMainWindow, QVBoxLayout, QLabel, QProgressBar, QPushButton, QWidget,
-        QSpinBox, QDoubleSpinBox, qApp, QAction, QTabWidget, QFileDialog)
+        QSpinBox, QDoubleSpinBox, qApp, QAction, QTabWidget, QFileDialog,
+        QHBoxLayout, QStyle)
 from PyQt5.QtGui import (QIcon)
 import sys
 import os
@@ -153,7 +154,7 @@ class ConfigTab(QWidget):
 
         return display
 
-    def add_dropdown(self, label, items=[], default=None, update=None, tip=None, name=None):
+    def add_combobox(self, label, items=[], default=None, update=None, tip=None, name=None, refresh=None):
         control = QComboBox()
         if items:
             control.addItems(items)
@@ -168,8 +169,6 @@ class ConfigTab(QWidget):
         label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
 
         self.grid.addWidget(label, self.gridloc, 0)
-        self.grid.addWidget(control, self.gridloc, 1)
-        self.gridloc += 1
 
         if tip is not None:
             tip = "<FONT COLOR=black>" + tip + "<\FONT>"
@@ -178,6 +177,20 @@ class ConfigTab(QWidget):
 
         if name is not None:
             self.settings[name] = control
+
+        if refresh:
+            hbox = QHBoxLayout()
+            refresh_button = QPushButton()
+            refresh_button.setIcon(self.style().standardIcon(QStyle.SP_BrowserReload))
+            refresh_button.clicked.connect(refresh)
+            hbox.addWidget(control, 1)
+            hbox.addWidget(refresh_button, 0)
+            self.grid.addLayout(hbox, self.gridloc, 1)
+        else:
+            self.grid.addWidget(control, self.gridloc, 1)
+
+
+        self.gridloc += 1
 
         return control
 
@@ -243,13 +256,15 @@ class MainControls(ConfigTab):
 
 class ScanControls(ConfigTab):
     def _build(self):
-        self.current_port = '-none-'
+        self.current_port = None
         self.sync = None
         self.active = False
         self.analog_scale = 1
 
-        self.port_select = self.add_dropdown(
-            'Syncronizer Serial Port:', update=self.select_port, name='sync_port',
+        self.port_select = self.add_combobox(
+            'Syncronizer Serial Port:',
+            update=self.select_port, name='sync_port',
+            refresh=self.update_ports,
             tip='Serial port to which the synchronizer board is connected.  You can update this list with File -> Update Serial Ports.'
         )
         self.update_ports()
@@ -261,13 +276,13 @@ class ScanControls(ConfigTab):
         )
 
         self.ramp_t0 = self.add_control(
-            'Pre-scan Ramp Time (ms):', 0.1, min=0, max=100, step=0.1, decimals=2,
+            'Pre-scan Ramp Time (ms):', 0.2, min=0, max=100, step=0.1, decimals=2,
             update=self.update_control_display, name='ramp_t0_ms',
             tip='Delay from the start of the ramp to start capturing frames; used to ensure the galvo has settled into a linear ramp.'
         )
 
         self.galvo_delay = self.add_control(
-            'Galvo Delay Compensation (ms):', 0.1, min=0, max=1, step=0.1, decimals=2,
+            'Galvo Delay Compensation (ms):', 0.2, min=0, max=1, step=0.1, decimals=2,
             update=self.update_control_display, name='galvo_delay',
             tip='Delay applied to the galvo signal, to compensate for response.  (Analog output is shifted by this much earlier in time.)'
         )
@@ -279,7 +294,7 @@ class ScanControls(ConfigTab):
         )
 
         self.ramp_tr = self.add_control(
-            'Ramp Return Time (ms):', 1.0, min=0, max=100, step=0.1, decimals=2,
+            'Ramp Return Time (ms):', 1.5, min=0, max=100, step=0.1, decimals=2,
             update=self.update_control_display, name='ramp_tr_ms',
             tip='Time for the ramp to return to the start.'
         )
@@ -306,6 +321,7 @@ class ScanControls(ConfigTab):
             'Upload Scan Profile', func=self.upload_profile,
             tip='Upload the scan to the device.'
         )
+        self.upload_button.setIcon(self.style().standardIcon(QStyle.SP_DialogApplyButton))
 
         self.vps = self.add_display(
             'Volume Rate:',
@@ -329,22 +345,38 @@ class ScanControls(ConfigTab):
     def update_ports(self):
         ports = ['-none-'] + [p.device for p in serial.tools.list_ports.comports()]
 
-        if self.current_port not in ports:
-            ports.append(self.current_port)
+        try:
+            cpi = ports.index('-none-' if self.current_port is None else self.current_port)
+        except ValueError:
+            cpi = 0
 
         self.port_select.clear()
         self.port_select.addItems(ports)
-        i = self.port_select.findText(self.current_port)
-        if i >= 0:
-            self.port_select.setCurrentIndex(i)
-        else:
-            self.port_select.setCurrentIndex(0)
+
+        self.port_select.setCurrentIndex(cpi)
+
+        # i = self.port_select.findText(self.current_port)
+        # print(i)
+        # if i >= 0:
+        #     self.port_select.setCurrentIndex(i)
+        # else:
+        #     self.port_select.setCurrentIndex(0)
+        #
+        # # Refreshing after a clear seems to leave an empty item; remove it!
+        # if self.port_select.count() > len(ports):
+        #     self.removeItem(self.port_select.count())
+
 
 
     def select_port(self):
         port = self.port_select.itemText(self.port_select.currentIndex())
 
-        if port == '-none-': port = None
+        # This gets triggered when you refresh/clear the list, just ignore!
+        if not len(port):
+            return
+
+        if port == '-none-':
+            port = None
 
         if port == self.current_port:
             return
@@ -356,23 +388,25 @@ class ScanControls(ConfigTab):
         if port is None:
             self.sync = None
             self.parent.statusBar().showMessage('Synchronizer not connected.')
-
         else:
             try:
                 self.sync = ADSync(port)
                 idn = self.sync.idn().decode('utf-8')
                 if 'synchronizer' in idn.lower():
+                    self.current_port = port
                     self.parent.statusBar().showMessage(f"Connected to sync board at {port}.")
                     self.update_scale()
                 else:
                     self.parent.statusBar().showMessage(f"ERROR: no sync board at {port}!")
                     self.sync.close()
                     self.sync = None
+                    self.port_select.setCurrentIndex(0)
             except:
                 self.parent.statusBar().showMessage(f"ERROR: could not open {port}!")
                 if hasattr(self.sync, 'close'):
                     self.sync.close()
                 self.sync = None
+                self.port_select.setCurrentIndex(0)
 
         self.update_control_display()
 
@@ -394,6 +428,7 @@ class ScanControls(ConfigTab):
         oversample1 = int((ADSync.FREQ_MAX) // frame_rate)
         oversample2 = int(ADSync.MAX_ADDR // total_frames)
         oversample = min(oversample1, oversample2)
+        # oversample = 2
         sample_rate = frame_rate * oversample
 
         samples = total_frames * oversample
@@ -418,6 +453,8 @@ class ScanControls(ConfigTab):
         analog = SmoothRamp(t0=ft0, ts=fpv, tr=ftr)(t_a * frame_rate)
         self.analog_scale = abs(analog).max()
         analog /= self.analog_scale
+
+        dig[0] += 1 << 7
 
         if self.flipped.isChecked():
             analog *= -1
