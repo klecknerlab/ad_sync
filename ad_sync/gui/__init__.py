@@ -435,12 +435,19 @@ class ScanControls(ConfigTab):
     def upload_profile(self):
         frame_rate = 1E3 * self.frame_rate.value()
         t0 = 1E-3 * self.ramp_t0.value()
+        channels = 2 if self.two_color.isChecked() else 1
         fpv = self.fpv.value()
         tr = 1E-3 * self.ramp_tr.value()
 
         ft0 = int(np.ceil(t0 * frame_rate))
         ftr = int(np.ceil(tr * frame_rate))
-        total_frames = ft0 + fpv + ftr
+        total_frames = ft0 + fpv * channels + ftr
+
+        # Ensure that each laser fires the same number of times per profile
+        if total_frames % channels:
+            extra_frames = channels - (total_frames % channels) # Round up
+            ftr += extra_frames
+            total_frames += extra_frames
 
         if self.sync is None:
             self.update_control_display()
@@ -449,30 +456,29 @@ class ScanControls(ConfigTab):
         oversample1 = int((ADSync.FREQ_MAX) // frame_rate)
         oversample2 = int(ADSync.MAX_ADDR // total_frames)
         oversample = min(oversample1, oversample2)
-        # oversample = 2
         sample_rate = frame_rate * oversample
 
         samples = total_frames * oversample
         dig = np.zeros(samples, dtype='u2')
 
-        camera_pulses = (ft0 + np.arange(fpv)) * oversample
+        camera_pulses = (ft0 + np.arange(fpv*channels)) * oversample
         dig[camera_pulses] += 1 << 0 # Channel 0 is camera
         dig[camera_pulses] += 1 << 8 # Channel 8 is camera in align mode
 
-        laser_pulses = np.arange(total_frames) * oversample
-        dig[laser_pulses] += 1 << 1 # Channel 1 is the laser
-
+        laser_pulses = np.arange(0, total_frames, channels) * oversample
         i0 = ft0 * oversample # sample # of first laser pulse in scan
-        i1 = (ft0 + fpv - 1) * oversample # sample # of last laser pulse in scan
+        i1 = i0 + (fpv - 1) * channels * oversample # sample # of last laser pulse in scan
         im = (i0 + i1) // 2 # Mid point; may not align with frame, but thats ok
         align_pulses = np.array([i0, im, i1], dtype='i')
 
-        dig[align_pulses] += 1 << 9 # Channel 1 in swap mode = laser
+        for i in range(channels):
+            dig[laser_pulses + i*oversample] += 1 << (i+1) # Channel i+1 is laser i+1
+            dig[align_pulses + i*oversample] += 1 << (i+9) # Channel (i+1) in swap mode (alignment)
 
         t_a = (np.arange(samples) - 0.5) / sample_rate + self.galvo_delay.value() * 1E-3
         t_d = np.arange(samples) / sample_rate
 
-        analog = SmoothRamp(t0=ft0, ts=fpv, tr=ftr)(t_a * frame_rate)
+        analog = SmoothRamp(t0=ft0, ts=fpv*channels, tr=ftr)(t_a * frame_rate)
         self.analog_scale = abs(analog).max()
         analog /= self.analog_scale
 
@@ -506,7 +512,7 @@ class ScanControls(ConfigTab):
             self.parent.statusBar().showMessage('ERROR: synchronizer failed to upload!')
 
         self.parent.main_controls.vps.setText(f'{frame_rate / total_frames:.1f} Hz')
-        self.parent.main_controls.duty_cycle.setText(f'{100 * fpv / total_frames:.1f} %')
+        self.parent.main_controls.duty_cycle.setText(f'{100 * fpv*channels / total_frames:.1f} %')
         self.parent.main_controls.max_exposure.setText(f'{1E6 / frame_rate  - 0.5:.1f} \u03bcs')
 
 
@@ -545,7 +551,8 @@ class ScanControls(ConfigTab):
 
         frame_rate = 1E3 * self.frame_rate.value()
         t0 = 1E-3 * self.ramp_t0.value()
-        fpv = self.fpv.value()
+        channels = 2 if self.two_color.isChecked() else 1
+        fpv = self.fpv.value() * channels
         tr = 1E-3 * self.ramp_tr.value()
 
         ft0 = int(np.ceil(t0 * frame_rate))
