@@ -3,17 +3,27 @@
 #define MAIN_H 1
 #include <Arduino.h>
 
-// I2S config options
-#include "driver/i2s.h"
 
 // Is Bluetooth enabled at all?
 #define BLUETOOTH_ENABLED 1
 
+// Fast mode.  If enabled output is up to 1050 kHz, but only 8 digital channels.
+#define FASTMODE_ENABLED 1
+
+// I2S config options
+#include "driver/i2s.h"
+
 #ifdef BLUETOOTH_ENABLED
     #include "BluetoothSerial.h"
     #if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
-    #error Bluetooth is not enabled! Please run `make menuconfig` to and enable it
+        #error Bluetooth is not enabled! Please run `make menuconfig` to and enable it
     #endif
+#endif
+
+#ifdef FASTMODE_ENABLED
+    #define i2s_buffer_t uint32_t
+#else
+    #define i2s_buffer_t uint64_t
 #endif
 
 // Maximum number of serial characters to process per command queue cycle.
@@ -66,7 +76,7 @@ const uint8_t LED_PINS[3] = {LED_R_PIN, LED_G_PIN, LED_B_PIN};
 // LED outputs a nice sequence of colors on boot, as defined here
 #define LED_STARTUP_LEN 5
 // Interval is in ms
-#define LED_STARTUP_INTERVAL 750 
+#define LED_STARTUP_INTERVAL 750
 const uint8_t LED_STARTUP_SEQ[LED_STARTUP_LEN][3] = {
     {  0,   0,   0},
     {  0,   0, 255},
@@ -112,8 +122,14 @@ extern int sync_start, sync_cycles;
 extern int sync_active;
 
 // Minimum and maximum frequency, set by the limits of the APLL clock
-#define MIN_FREQ 30
-#define MAX_FREQ 700000
+// Also depends on fast mode (32 clock ticks per update) vs regular mode (48)
+#ifdef FASTMODE_ENABLED
+    #define MIN_FREQ 45
+    #define MAX_FREQ 1050000
+#else
+    #define MIN_FREQ 30
+    #define MAX_FREQ 700000
+#endif
 
 // Used to compute "sync stat" output
 extern uint last_bytes_written, cycles_since_write;

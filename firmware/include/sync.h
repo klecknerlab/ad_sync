@@ -15,11 +15,11 @@
 #ifdef DAC8562
     // These are the SPI header bits used for the MCP4822
     // Note: the data is always 16 bits, so we are shifting to the left of that.
-    #define DAC_SPI_CH0 (0b011000 << 16)
-    #define DAC_SPI_CH1 (0b011001 << 16)
+    #define DAC_SPI_CH0 (0b00011000 << 16)
+    #define DAC_SPI_CH1 (0b00011001 << 16)
 
     // These codes are run (in order) after the device is fully booted.
-    
+
     // Internal reference, gain = 2
     #define DAC_SETUP_A 0b001110000000000000000001
     //                    XXCCCAAAddddddddDDDDDDDD
@@ -33,9 +33,9 @@
     #define DAC_SETUP_D 0b001000000000000000000011
     //                    XXCCCAAAddddddddDDDDDDDD
 
-    // Bit shift required to align the data.  The buffer is 32 bits, and the data+header is 24 bits
-    #define DAC_SHIFT 8
-
+    // Length of analog data
+    #define DAC_BITS 24
+    
     // Delay in us after boot to try running the setup commands.
     #define DAC_SETUP_DELAY_US 100000
 #endif
@@ -51,13 +51,27 @@
     #define DAC_SETUP_C 0
     #define DAC_SETUP_D 0
     // Bit shift required to align the data.  The buffer is 32 bits, and the data+header is 20 bits
-    #define DAC_SHIFT 12
+    #define DAC_BITS 20
     #define DAC_SETUP_DELAY_US 0
 #endif
 
 // Output masks for analog and digital data
-#define I2S_DIG_MASK (0xFFFFFFFF00000000)
-#define I2S_ANA_MASK (0x00000000FFFFFFFF)
+#ifdef FASTMODE_ENABLED
+    // In fastmode, we dump digital channels 9-16
+    #define I2S_SAMPLE(analog, digital) ((i2s_buffer_t(analog) << (32 - DAC_BITS)) + (digital & 0xFF))
+
+    // #define I2S_DIG_MASK (0x0000000FF)
+    // #define I2S_PORT_MASK (0xFF) 
+    // #define I2S_DIG_SHIFT 0
+    // #define I2S_ANA_MASK (0xFFFFFF00)
+    // #define I2S_ANA_SHIFT 8
+#else
+    #define I2S_SAMPLE(analog, digital) ((i2s_buffer_t(analog) << (64 - DAC_BITS)) + digital)
+    // #define I2S_DIG_MASK (0xFFFFFFFF00000000)
+    // #define I2S_PORT_MASK (0xFFFF)
+    // #define 
+    // #define I2S_ANA_MASK (0x00000000FFFFFFFF)
+#endif
 
 #define APLL_MIN 350000000
 #define APLL_MAX 560000000
@@ -68,17 +82,31 @@
 #include <soc/rtc.h>
 
 // I2S setup
-const i2s_config_t i2s_config = {
-    .mode = i2s_mode_t(I2S_MODE_MASTER | I2S_MODE_TX),
-    .sample_rate = 10000, // This is irrelevant, changed later by other code
-    .bits_per_sample = I2S_BITS_PER_SAMPLE_24BIT,
-    .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
-    .communication_format = i2s_comm_format_t(I2S_COMM_FORMAT_I2S | I2S_COMM_FORMAT_I2S_LSB), // "LSB" alignment is really MSB alignment.  Don't ask me why!
-    .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
-    .dma_buf_count = 4,
-    .dma_buf_len = (2*I2S_WRITE_BUFFER_SIZE),
-    .use_apll = true,
-};
+#ifdef FASTMODE_ENABLED
+    const i2s_config_t i2s_config = {
+        .mode = i2s_mode_t(I2S_MODE_MASTER | I2S_MODE_TX),
+        .sample_rate = 10000, // This is irrelevant, changed later by other code
+        .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
+        .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
+        .communication_format = I2S_COMM_FORMAT_PCM, 
+        .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
+        .dma_buf_count = 4,
+        .dma_buf_len = (2*I2S_WRITE_BUFFER_SIZE),
+        .use_apll = true,
+    };
+#else
+    const i2s_config_t i2s_config = {
+        .mode = i2s_mode_t(I2S_MODE_MASTER | I2S_MODE_TX),
+        .sample_rate = 10000, // This is irrelevant, changed later by other code
+        .bits_per_sample = I2S_BITS_PER_SAMPLE_24BIT,
+        .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
+        .communication_format = i2s_comm_format_t(I2S_COMM_FORMAT_I2S | I2S_COMM_FORMAT_I2S_LSB), // "LSB" alignment is really MSB alignment.  Don't ask me why!
+        .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
+        .dma_buf_count = 4,
+        .dma_buf_len = (2*I2S_WRITE_BUFFER_SIZE),
+        .use_apll = true,
+    };
+#endif
 
 static const uint8_t APLL_DIV[NUM_APLL_DIV][3] = {
     { 0,  2,  2}, { 1,  2,  2}, { 2,  2,  2}, { 4,  2,  2}, { 6,  2,  2},

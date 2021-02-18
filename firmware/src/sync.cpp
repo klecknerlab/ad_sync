@@ -21,7 +21,7 @@ uint32_t trigger_mask = 0;
 // Internal variables
 static int sync_end = 1024;
 static unsigned long t1;
-static uint64_t i2s_write_buffer[I2S_WRITE_BUFFER_SIZE];
+static i2s_buffer_t i2s_write_buffer[I2S_WRITE_BUFFER_SIZE];
 static size_t bytes_written = I2S_WRITE_BUFFER_SIZE; // When we've just start up we need to update the output.
 static int sync_i = 0;
 static int sync_was_active = 0;
@@ -114,7 +114,7 @@ void update_sync() {
                     dd |= (data & 0xFF00) >> 8;
                 }
 
-                
+
 
                 // Bits 8-31 are analog output -- shift determined by global constant (DAC dependent)
                 // Bits 40-63 are digital output.
