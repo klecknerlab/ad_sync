@@ -264,6 +264,12 @@ class MainControls(ConfigTab):
             tip='The maximum exposure time to set on the camera (1/framerate - 0.5 \u03bcs)'
         )
 
+        self.trigger_button = self.add_button(
+            'Fire Trigger', func=self.trigger,
+            tip='Fire the trigger (digital port 3).'
+        )
+        self.trigger_button.setIcon(self.style().standardIcon(QStyle.SP_CommandLink))
+
         self.grid.addWidget(QWidget(), self.gridloc, 0, 1, 2)
         self.grid.setRowStretch(self.gridloc, 1)
 
@@ -278,6 +284,10 @@ class MainControls(ConfigTab):
     def update_active(self):
         if hasattr(self.parent, "scan_controls"):
             self.parent.scan_controls.update_active()
+
+    def trigger(self):
+        if hasattr(self.parent, "scan_controls"):
+            self.parent.scan_controls.trigger()
 
 
 class ScanControls(ConfigTab):
@@ -335,6 +345,24 @@ class ScanControls(ConfigTab):
             'Flip Scan Direction:', False,
             update=self.update_control_display, name='scan_flipped',
             tip='If checked, flip the direction of the scan.'
+        )
+
+        self.cont_frames = self.add_checkbox(
+            'Continuous Frame Capture:', False,
+            update=self.update_control_display, name='continuous_frame_capture',
+            tip='If checked, record frames through the entire scan cycle (otherwise only records frames during the active period.'
+        )
+
+        self.double_pulse_1 = self.add_checkbox(
+            'Double Pulse Laser 1:', False,
+            update=self.update_control_display, name='double_pulse_1',
+            tip='If checked, laser 1 outputs 2 pulses in rapid succession (note: this option is ignored if the framerate is >175 kHz, as the board cannot output fast enough!)'
+        )
+
+        self.double_pulse_2 = self.add_checkbox(
+            'Double Pulse Laser 2:', False,
+            update=self.update_control_display, name='double_pulse_2',
+            tip='If checked, laser 2 outputs 2 pulses in rapid succession (note: this option is ignored if the framerate is >175 kHz, as the board cannot output fast enough!)'
         )
 
         self.upload_button = self.add_button(
@@ -461,7 +489,11 @@ class ScanControls(ConfigTab):
         samples = total_frames * oversample
         dig = np.zeros(samples, dtype='u2')
 
-        camera_pulses = (ft0 + np.arange(fpv*channels)) * oversample
+        if self.cont_frames.isChecked():
+            camera_pulses = np.arange(total_frames) * oversample
+        else:
+            camera_pulses = (ft0 + np.arange(fpv*channels)) * oversample
+
         dig[camera_pulses] += 1 << 0 # Channel 0 is camera
         dig[camera_pulses] += 1 << 8 # Channel 8 is camera in align mode
 
@@ -471,8 +503,20 @@ class ScanControls(ConfigTab):
         im = (i0 + i1) // 2 # Mid point; may not align with frame, but thats ok
         align_pulses = np.array([i0, im, i1], dtype='i')
 
+        if oversample > 3:
+            double_pulses = (
+                self.double_pulse_1.isChecked(),
+                self.double_pulse_2.isChecked()
+            )
+            ignore_dp = False
+        else:
+            double_pulses = (False, False)
+            ignore_dp = self.double_pulse_1.isChecked() or self.double_pulse_2.isChecked()
+
         for i in range(channels):
             dig[laser_pulses + i*oversample] += 1 << (i+1) # Channel i+1 is laser i+1
+            if double_pulses[i]:
+                dig[laser_pulses + i*oversample + 2] += 1 << (i+1) # Channel i+1 is laser i+1
             dig[align_pulses + i*oversample] += 1 << (i+9) # Channel (i+1) in swap mode (alignment)
 
         t_a = (np.arange(samples) - 0.5) / sample_rate + self.galvo_delay.value() * 1E-3
@@ -482,8 +526,10 @@ class ScanControls(ConfigTab):
         self.analog_scale = abs(analog).max()
         analog /= self.analog_scale
 
-        dig[ft0 * oversample] += 1 << 3 # Volume start signal
+        dig[ft0 * oversample] += 1 << 3 # Volume start signal (triggered)
         dig[ft0 * oversample] += 1 << 11 # Volume start signal in alignment mode
+        dig[ft0 * oversample] += 1 << 4 # Volume start signal (not triggered)
+        dig[ft0 * oversample] += 1 << 12 # Volume start signal in alignment mode
 
 
         if self.flipped.isChecked():
@@ -493,6 +539,7 @@ class ScanControls(ConfigTab):
             self.sync.stop()
             self.sync.led(255, 0, 255)
             self.sync.rate(sample_rate)
+            self.sync.trigger_mask(1<<3)
             response = self.sync.write_ad(0, dig, analog)
 
             m = re.match(b'Wrote (\d+) samples', response)
@@ -503,7 +550,10 @@ class ScanControls(ConfigTab):
 
             if m and int(m.group(1)) == samples:
                 self.upload_button.setEnabled(False)
-                self.parent.statusBar().showMessage('Scan profile successfully uploaded!')
+                if ignore_dp:
+                    self.parent.statusBar().showMessage('Scan profile uploaded, but double pulse ignored.')
+                else:
+                    self.parent.statusBar().showMessage('Scan profile successfully uploaded!')
             else:
                 self.parent.statusBar().showMessage('Syncronizer responded incorrectly to upload (disconnected?).')
                 print(f"WARNING: unexpected response to sync data upload\n (received '{response.decode('utf-8')}')")
@@ -544,6 +594,9 @@ class ScanControls(ConfigTab):
                 self.sync.stop()
 
             self.sync.mode(1, 2 if self.parent.main_controls.align_mode.isChecked() else 0)
+
+    def trigger(self):
+        self.sync.trigger()
 
     def update_control_display(self):
         if not self.active:
