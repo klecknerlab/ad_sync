@@ -361,7 +361,7 @@ class SerialTab(ConfigTab):
         self.gridloc += 1
 
     def send_command(self, command):
-        # self.read_serial()
+        self.read_serial()
         self.serial_output.insertHtml(f'<font color="#00F">\u1405 {command}</font><br>')
         # if hasattr(self.parent, "scan_controls"):
         # time.sleep(0.1)
@@ -375,28 +375,29 @@ class SerialTab(ConfigTab):
         self.send_command("*IDN?")
 
     def laser_on(self):
+        self.send_command('MODE:RMT 1')
         self.send_command('ON')
 
     def laser_off(self):
         self.send_command('OFF')
 
     def external_trigger(self):
-        self.send_command('MODE:RMT 1')
+        self.send_command('QSW:PRF 0')
 
     def internal_trigger(self):
-        self.send_command('MODE:RMT 0')
+        self.send_command('QSW:PRF 10000')
 
     def set_baud(self):
         rate = int(self.baudrate.itemText(self.baudrate.currentIndex()))
         # if hasattr(self.parent, "scan_controls"):
         self.parent.scan_controls.serial_baud(self.port, rate)
 
-    def read_serial(self, max_bytes=None):
+    def read_serial(self, max_bytes=256):
         # if hasattr(self.parent, "scan_controls"):
         read = self.parent.scan_controls.serial_read(self.port, max_bytes)
         if read is not None:
             try:
-                self.serial_output.insertPlainText(read.decode('utf-8'))
+                self.serial_output.insertHtml(read.decode('utf-8').replace('\n', '<br>'))
             except:
                 self.serial_output.insertHtml(f'<nr><font color="#F00">!! corrupted input: {repr(read)} !!</font><br>')
 
