@@ -3,7 +3,7 @@ from PyQt5 import QtCore
 from PyQt5.QtWidgets import (QApplication, QCheckBox, QComboBox, QGridLayout,
         QMainWindow, QVBoxLayout, QLabel, QProgressBar, QPushButton, QWidget,
         QSpinBox, QDoubleSpinBox, qApp, QAction, QTabWidget, QFileDialog,
-        QHBoxLayout, QStyle)
+        QHBoxLayout, QStyle, QTextEdit, QLineEdit)
 from PyQt5.QtGui import (QIcon)
 import sys
 import os
@@ -11,6 +11,7 @@ import serial.tools.list_ports
 from .. import ADSync, SmoothRamp
 import json
 import re
+import time
 
 # Set the name in the menubar.
 if sys.platform.startswith('darwin'):
@@ -160,7 +161,7 @@ class ConfigTab(QWidget):
             control.addItems(items)
 
         if default is not None:
-            self.setCurrentIndex(default)
+            control.setCurrentIndex(default)
 
         if update is not None:
             control.currentIndexChanged.connect(update)
@@ -216,6 +217,31 @@ class ConfigTab(QWidget):
         self.gridloc += 1
 
         return button
+
+    def add_two_buttons(self, label1, label2, func1=None, func2=None, tip1=None, tip2=None):
+        button1 = QPushButton(label1)
+        button2 = QPushButton(label2)
+
+        if tip1 is not None:
+            tip = "<FONT COLOR=black>" + tip1 + "<\FONT>"
+            button1.setToolTip(tip)
+
+        if tip2 is not None:
+            tip = "<FONT COLOR=black>" + tip2 + "<\FONT>"
+            button1.setToolTip(tip)
+
+        if func1 is not None:
+            button1.clicked.connect(func1)
+
+        if func2 is not None:
+            button2.clicked.connect(func2)
+
+        self.grid.addWidget(button1, self.gridloc, 0)
+        self.grid.addWidget(button2, self.gridloc, 1)
+        self.gridloc += 1
+
+        return button1, button2
+
 
 
 class MainControls(ConfigTab):
@@ -290,7 +316,97 @@ class MainControls(ConfigTab):
             self.parent.scan_controls.trigger()
 
 
+
+class SerialTab(ConfigTab):
+    BAUD_RATES = (9600, 14400, 19200, 38400, 57600, 115200, 128000, 256000)
+
+    def __init__(self, port, *args, **kwargs):
+        self.port = port
+        super().__init__(*args, **kwargs)
+
+    def _build(self):
+        self.baudrate = self.add_combobox('BAUD:', list(map(str, self.BAUD_RATES)), default=0, update=self.set_baud)
+
+        self.idn_button = self.add_button(
+            'Identify Laser', func=self.laser_idn,
+            tip='Send the "IDN" command to the laser.'
+        )
+
+        self.laser_on_button, self.laser_off_button = self.add_two_buttons(
+            'Laser On', 'Laser Off', func1=self.laser_on, func2=self.laser_off,
+            tip1='Turn on the laser connected to this port.',
+            tip2='Turn off the laser connected to this port.'
+        )
+
+        self.ext_button, self.int_button = self.add_two_buttons(
+            'Ext. Trigger', 'Int. Trigger', func1=self.external_trigger, func2=self.internal_trigger,
+            tip1='Enable external triggering on the laser connected to this port.',
+            tip2='Enable internal triggering on the laser connected to this port.'
+        )
+
+        self.serial_output = QTextEdit()
+        self.serial_output.setReadOnly(True)
+        self.grid.addWidget(self.serial_output, self.gridloc, 0, 1, 2)
+        self.gridloc += 1
+
+        self.read_button, self.clear_button = self.add_two_buttons(
+            'Update', 'Clear', func1=self.read_serial, func2=self.clear_output,
+            tip1='Read from the serial port.',
+            tip2='Clear the output display.'
+        )
+
+        self.serial_input = QLineEdit()
+        self.serial_input.returnPressed.connect(self.custom_command)
+        self.grid.addWidget(self.serial_input, self.gridloc, 0, 1, 2)
+        self.gridloc += 1
+
+    def send_command(self, command):
+        # self.read_serial()
+        self.serial_output.insertHtml(f'<font color="#00F">\u1405 {command}</font><br>')
+        # if hasattr(self.parent, "scan_controls"):
+        # time.sleep(0.1)
+        self.parent.scan_controls.serial_write(self.port, command.encode('utf-8') + b"\r\n")
+
+    def custom_command(self):
+        self.send_command(self.serial_input.text())
+        self.serial_input.clear()
+
+    def laser_idn(self):
+        self.send_command("*IDN?")
+
+    def laser_on(self):
+        self.send_command('ON')
+
+    def laser_off(self):
+        self.send_command('OFF')
+
+    def external_trigger(self):
+        self.send_command('MODE:RMT 1')
+
+    def internal_trigger(self):
+        self.send_command('MODE:RMT 0')
+
+    def set_baud(self):
+        rate = int(self.baudrate.itemText(self.baudrate.currentIndex()))
+        # if hasattr(self.parent, "scan_controls"):
+        self.parent.scan_controls.serial_baud(self.port, rate)
+
+    def read_serial(self, max_bytes=None):
+        # if hasattr(self.parent, "scan_controls"):
+        read = self.parent.scan_controls.serial_read(self.port, max_bytes)
+        if read is not None:
+            try:
+                self.serial_output.insertPlainText(read.decode('utf-8'))
+            except:
+                self.serial_output.insertHtml(f'<nr><font color="#F00">!! corrupted input: {repr(read)} !!</font><br>')
+
+    def clear_output(self):
+        self.serial_output.clear()
+
+
 class ScanControls(ConfigTab):
+    _SER_DEBUG = True
+
     def _build(self):
         self.current_port = None
         self.sync = None
@@ -369,6 +485,7 @@ class ScanControls(ConfigTab):
             'Upload Scan Profile', func=self.upload_profile,
             tip='Upload the scan to the device.'
         )
+
         self.upload_button.setIcon(self.style().standardIcon(QStyle.SP_DialogApplyButton))
 
         self.vps = self.add_display(
@@ -596,7 +713,34 @@ class ScanControls(ConfigTab):
             self.sync.mode(1, 2 if self.parent.main_controls.align_mode.isChecked() else 0)
 
     def trigger(self):
-        self.sync.trigger()
+        if self.sync is not None:
+            self.sync.trigger()
+
+    def serial_write(self, port, command):
+        if self.sync is not None:
+            write = self.sync.ser_write(port, command)
+            if self._SER_DEBUG:
+                print(port, '<-', repr(command), repr(write))
+        else:
+            return None
+
+    def serial_read(self, port, max_bytes):
+        if self.sync is not None:
+            response = self.sync.ser_read(port, max_bytes)
+            if self._SER_DEBUG:
+                print(port, '->', repr(response))
+            return response
+        else:
+            return None
+
+    def serial_baud(self, port, baudrate):
+        if self.sync is not None:
+            if self._SER_DEBUG:
+                print(port, ':', baudrate)
+            self.sync.ser_baud(port, baudrate)
+            return True
+        else:
+            return False
 
     def update_control_display(self):
         if not self.active:
@@ -653,9 +797,13 @@ class MainWindow(QMainWindow):
 
         self.main_controls = MainControls(self)
         self.scan_controls = ScanControls(self)
+        self.serial1 = SerialTab(1, self)
+        self.serial2 = SerialTab(2, self)
 
         self.tabs.addTab(self.main_controls, "Main")
         self.tabs.addTab(self.scan_controls, "Scan Setup")
+        self.tabs.addTab(self.serial1, "Serial 1")
+        self.tabs.addTab(self.serial2, "Serial 2")
         self.tabs.setCurrentIndex(1)
 
     def save_settings(self):

@@ -24,7 +24,7 @@ class ADSync:
 
         Keywords
         --------
-        baud : int (default: 115200)
+        baud : int (default: 921600)
         timeout : float (default: 0.5)
         debug : bool (default: False)
             If true, prints out all serial communcation with the device.
